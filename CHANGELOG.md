@@ -2,6 +2,51 @@
 
 All notable changes to CityPulse AI. Dates are ISO-8601.
 
+## [0.4.0] - 2026-11-13
+
+### Added
+- **CPCB ground-station integration.** `station_ingest.py` registers the two
+  Gwalior CAAQMS stations (5273 City Center, 5275 Phool Bagh) and retrieves
+  observations through the XKDR India Air Quality API, storing them in a new
+  `air_quality_observations` table keyed by station, variable and timestamp.
+  Without `XKDR_AQI_KEY` the module stores nothing and the UI reports observed
+  data as unavailable — no reading is ever fabricated.
+- `/api/environment/stations` (containment, boundary distance, observation
+  counts and freshness), `/api/environment/observations`, and station entries in
+  `/api/environment/sources`.
+- `station_geo.py`: AOI containment and boundary distance using PostGIS
+  `ST_Covers` and `ST_Distance` over `geography`, returning exactly 0 km for
+  stations inside the AOI.
+- Shared responsive `DashboardLayout` wired into the router: desktop links, a
+  mobile menu with active states and a skip link.
+- Environment page sections for Gwalior monitoring stations and ground-observed
+  readings, with an explicit empty state and freshness per station.
+- Landing page rebuilt around real captures, module overview, technology stack,
+  data types and stated limitations.
+- Methodology page rebuilt: data types, architecture, database design,
+  geographic methods, formulas, provenance, reproducibility and limitations.
+- Regression tests for stations inside, outside and on the AOI boundary (33
+  backend tests total).
+- `CORS_ORIGINS` environment variable; `.env.example` documents every variable
+  including the optional station API key.
+
+### Changed
+- Station distance is now measured to the nearest AOI boundary, not a hardcoded
+  centroid. Phool Bagh lies inside the AOI (0 km); City Center is 0.80 km outside.
+- `/api/environment/sources` reads stations on a live connection; it previously
+  queried a closed one and silently dropped station provenance.
+- Landing and Methodology copy no longer claim machine learning, SHAP or
+  predictive analytics — none are implemented.
+
+### Fixed
+- Removed the unused, syntactically invalid `Navigation.tsx`.
+- Environment page no longer renders modelled values under an "observed" heading.
+
+### Known gaps
+- CPCB observation rows require an API key; none are stored by default.
+- Traffic volumes, NDVI, land-surface temperature and ML models remain unavailable
+  and are reported as such.
+
 ## [0.3.0] - 2026-11-13
 
 ### Added

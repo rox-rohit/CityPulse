@@ -94,8 +94,31 @@ All geometry is EPSG:4326 with no duplicate OSM ids.
 | `GET /api/metadata/{layer}` | License, resolution, processing history, limitations |
 | `GET /api/analytics/network` | Road length by highway class (no traffic data) |
 | `GET /api/analytics/green-cover` | Mapped green area as a share of the AOI |
+| `GET /api/environment/overview` | Modelled air quality, temperature, green cover and data gaps |
+| `GET /api/environment/sources` | Provenance for every dataset and CPCB station |
+| `GET /api/environment/stations` | Stations with `inside_aoi`, distance to the AOI boundary and observation counts |
+| `GET /api/environment/observations` | Observed readings per station/variable (404 when none) |
+| `POST /api/environment/refresh` | Re-fetch CAMS air quality and ERA5 temperature |
+| `GET/POST /api/civic-issues` | List and create civic reports |
+| `PATCH /api/civic-issues/{id}/status` | Moderation transitions |
+| `GET /api/civic-issues/stats`, `/hotspots` | Counters and DBSCAN clusters |
+| `POST /api/analyst/ask` | Answer a question from stored data |
 
 Interactive docs: <http://127.0.0.1:8000/docs>.
+
+### Environmental and station ingestion
+
+```bash
+./.venv/Scripts/python.exe environment_ingest.py   # CAMS + ERA5 → environmental_observations
+./.venv/Scripts/python.exe station_ingest.py       # CPCB stations → air_quality_observations
+```
+
+`station_ingest.py` registers the two Gwalior CAAQMS stations (5273 City Center,
+5275 Phool Bagh) and pulls readings through the XKDR India Air Quality API when
+`XKDR_AQI_KEY` is set. Without a key it stores nothing and reports observations as
+unavailable — it never fabricates readings. Station distance is measured to the
+AOI boundary (`ST_Distance` over `geography`), returning 0 km when a station lies
+inside the AOI.
 
 ## 5. Tests
 

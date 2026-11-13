@@ -1,4 +1,5 @@
 import { createBrowserRouter } from "react-router-dom";
+import DashboardLayout from "./components/DashboardLayout";
 import LandingPage from "./pages/LandingPage";
 import DigitalTwin from "./pages/DigitalTwin";
 import Traffic from "./pages/Traffic";
@@ -14,31 +15,16 @@ export const router = createBrowserRouter([
     element: <LandingPage />,
   },
   {
-    path: "/digital-twin",
-    element: <DigitalTwin />,
-  },
-  {
-    path: "/traffic",
-    element: <Traffic />,
-  },
-  {
-    path: "/environment",
-    element: <Environment />,
-  },
-  {
-    path: "/civic-issues",
-    element: <CivicIssues />,
-  },
-  {
-    path: "/scenario-lab",
-    element: <ScenarioLab />,
-  },
-  {
-    path: "/ai-analyst",
-    element: <AIAnalyst />,
-  },
-  {
-    path: "/methodology",
-    element: <Methodology />,
+    // Shared, responsive dashboard shell: header navigation plus <Outlet />.
+    element: <DashboardLayout />,
+    children: [
+      { path: "/digital-twin", element: <DigitalTwin /> },
+      { path: "/traffic", element: <Traffic /> },
+      { path: "/environment", element: <Environment /> },
+      { path: "/civic-issues", element: <CivicIssues /> },
+      { path: "/scenario-lab", element: <ScenarioLab /> },
+      { path: "/ai-analyst", element: <AIAnalyst /> },
+      { path: "/methodology", element: <Methodology /> },
+    ],
   },
 ]);

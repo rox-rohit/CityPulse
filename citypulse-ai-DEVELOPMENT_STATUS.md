@@ -92,13 +92,15 @@ Bugs found and fixed during this work (the previous scripts could not have run):
 |-------|--------|
 | `npx tsc --noEmit` | pass, 0 errors |
 | `npm run build` | pass (`dist/` produced) |
-| `pytest tests -q` (backend) | **28 passed** |
+| `pytest tests -q` (backend) | **33 passed** (includes AOI containment/boundary-distance regressions) |
 | `vitest run` (frontend) | **4 passed** |
 | API responses via curl | health, summary, layers, roads GeoJSON, green-cover all 200 |
 | API (milestone 2) via curl | `/api/environment/overview`, `/api/environment/sources`, civic create/duplicate/409-status/hotspots, `/api/analyst/ask` (answered + refused) all behave as designed |
 | Browser (Digital Twin 2D) | real geometry rendered, 893 overlay paths, no console errors |
 | Browser (Digital Twin 3D) | satellite basemap, AOI outline, roads, buildings, facilities rendered |
-| Browser (Environment) | PM2.5/PM10/NO₂ modelled values, WHO comparison, temperature table, sources list |
+| Browser (Environment) | PM2.5/PM10/NO₂ modelled values, WHO comparison, temperature table, Gwalior station cards with AOI containment, explicit "no ground-observed readings" state, sources list |
+| Browser (Landing, Methodology) | Rendered with real screenshots and documented limitations; no false ML claims |
+| Responsive (390 × 844) | Landing and Environment: no horizontal overflow; mobile nav control present |
 | Browser (Civic Issues) | map click set coordinates, report submitted (reference returned), list and counters refreshed, `mark verified` transition applied |
 | Browser (AI Analyst) | question answered with facts, source and uncertainty list |
 | Browser (Scenario Lab) | baseline read from API, formulas rendered, simulated output recomputed on parameter change |
@@ -107,10 +109,10 @@ Bugs found and fixed during this work (the previous scripts could not have run):
 
 ## Still not done / limitations
 
-1. **No environmental value is a local measurement.** Air quality and
-   temperature are modelled grid fields (CAMS ~40 km, ERA5 ~9–11 km) sampled at
-   the AOI centroid; a Gwalior monitoring station would be needed for observed
-   values.
+1. **No ground-observed reading is stored yet.** The two Gwalior CPCB stations
+   are registered with their coordinates and AOI distance, but observation rows
+   require an XKDR API key that is not configured. Modelled CAMS/ERA5 values are
+   shown separately and are never presented as station measurements.
 2. Land-surface temperature, NDVI and local PM10 monitoring are unavailable and
    are shown as unavailable — they are not estimated.
 3. No machine-learning models are trained (no validated target variables yet).
@@ -134,7 +136,8 @@ Bugs found and fixed during this work (the previous scripts could not have run):
 
 ## Next priorities
 
-1. Connect a Gwalior CPCB/GPCB station or CAAQMS feed for observed air quality.
+1. Obtain an XKDR India Air Quality API key and retrieve CPCB observations, then
+   chart observed against modelled series.
 2. Obtain authoritative ward or study-area boundaries so the AOI can become a
    real polygon.
 3. Add a validated ML target (e.g. road-class or land-use classification) with

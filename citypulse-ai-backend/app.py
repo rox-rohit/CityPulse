@@ -13,6 +13,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+import os
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -22,20 +24,27 @@ from db_config import get_engine
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("api")
 
+# Allowed browser origins come from the environment so a deployment can point at
+# its own frontend without editing code. Comma-separated list.
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:4173,http://127.0.0.1:4173",
+    ).split(",")
+    if origin.strip()
+]
+
 app = FastAPI(
     title="CityPulse AI API",
     description="Urban analytics backend for the Maharaj Bada AOI, Gwalior",
-    version="0.2.0",
+    version="0.4.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["*"],

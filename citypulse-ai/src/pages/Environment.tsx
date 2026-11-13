@@ -104,6 +104,8 @@ const Environment = () => {
     }
   };
 
+  const observedTotal = stations.reduce((total, station) => total + station.value_count, 0);
+
   const pollutants = overview?.air_quality.pollutants ?? [];
   const primaryPollutants = useMemo(
     () => pollutants.filter((item) => ["pm2_5", "pm10", "nitrogen_dioxide"].includes(item.variable)),
@@ -347,6 +349,18 @@ const Environment = () => {
                               {station.latitude.toFixed(4)}, {station.longitude.toFixed(4)}
                             </dd>
                           </div>
+                          <div className="flex justify-between gap-3">
+                            <dt>Stored observations</dt>
+                            <dd className="text-foreground">{station.value_count}</dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt>Latest observation</dt>
+                            <dd className="text-foreground">
+                              {station.latest_observed_at
+                                ? station.latest_observed_at.slice(0, 16).replace("T", " ")
+                                : "none retrieved"}
+                            </dd>
+                          </div>
                         </dl>
                       </div>
                     ))}
@@ -363,64 +377,69 @@ const Environment = () => {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-lg font-medium mb-3">Observed pollutant values</h2>
-              <div className="grid md:grid-cols-3 gap-4">
-                {primaryPollutants.map((pollutant) => (
-                  <div key={pollutant.variable} className="rounded-xl border border-border bg-card p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          {LABELS[pollutant.variable] ?? pollutant.variable}
-                        </p>
-                        <p className="text-3xl font-semibold mt-1">
-                          {pollutant.latest ?? "—"}
-                          <span className="text-sm font-normal text-muted-foreground ml-1">
-                            {pollutant.unit}
+              <h2 className="text-lg font-medium mb-3">Ground-observed station readings</h2>
+              {observedTotal === 0 ? (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+                  <strong className="font-semibold">
+                    No ground-observed readings are stored.
+                  </strong>{" "}
+                  The CPCB station records exist for these sites, but no observation rows have
+                  been retrieved into this database, so no observed pollutant value is shown.
+                  The values in the modelled section above come from CAMS and are not station
+                  measurements. To ingest observations, obtain an XKDR India Air Quality API key
+                  and set <code>XKDR_AQI_KEY</code> before running{" "}
+                  <code>python station_ingest.py</code>.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {stations
+                    .filter((station) => station.value_count > 0)
+                    .map((station) => (
+                      <div
+                        key={station.station_id}
+                        className="rounded-xl border border-border bg-card p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="font-medium">
+                            {station.name}
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({station.station_id})
+                            </span>
+                          </p>
+                          <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-accent-teal/20 text-accent-teal">
+                            observed
                           </span>
-                        </p>
-                      </div>
-                      <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-accent-violet/20 text-accent-violet">
-                        {pollutant.data_type}
-                      </span>
-                    </div>
-                    <dl className="mt-3 space-y-1 text-xs text-muted-foreground">
-                      <div className="flex justify-between">
-                        <dt>24 h mean</dt>
-                        <dd className="text-foreground">
-                          {pollutant.mean_24h ?? "—"} {pollutant.unit}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt>24 h range</dt>
-                        <dd className="text-foreground">
-                          {pollutant.min_24h ?? "—"} – {pollutant.max_24h ?? "—"}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt>Hourly samples</dt>
-                        <dd className="text-foreground">{pollutant.samples_24h}</dd>
-                      </div>
-                      {pollutant.guideline && (
-                        <div className="flex justify-between">
-                          <dt>WHO 24 h AQG</dt>
-                          <dd className={pollutant.exceeds_guideline ? "text-red-400" : "text-accent-teal"}>
-                            {pollutant.guideline.value} {pollutant.unit}
-                            {pollutant.exceeds_guideline ? " · exceeded" : " · within"}
-                          </dd>
                         </div>
-                      )}
-                      <div className="flex justify-between pt-1 border-t border-border">
-                        <dt>Latest hour</dt>
-                        <dd>{pollutant.latest_time?.replace("T", " ").slice(0, 16) ?? "—"}</dd>
+                        <dl className="mt-3 space-y-1 text-xs text-muted-foreground">
+                          <div className="flex justify-between gap-3">
+                            <dt>Stored observations</dt>
+                            <dd className="text-foreground">{station.value_count}</dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt>Latest observation</dt>
+                            <dd className="text-foreground">
+                              {station.latest_observed_at?.slice(0, 16).replace("T", " ") ?? "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt>Variables present</dt>
+                            <dd className="text-foreground text-right">
+                              {station.observed_variables.length > 0
+                                ? station.observed_variables
+                                    .map((variable) => LABELS[variable] ?? variable)
+                                    .join(", ")
+                                : "—"}
+                            </dd>
+                          </div>
+                        </dl>
                       </div>
-                    </dl>
-                  </div>
-                ))}
-              </div>
+                    ))}
+                </div>
+              )}
               <p className="mt-2 text-[11px] text-muted-foreground">
-                CAMS is a ~40 km gridded model, interpolated to the AOI centroid. Street-level
-                concentrations can differ substantially. Fetched{" "}
-                {pollutants[0]?.fetched_at?.slice(0, 16).replace("T", " ") ?? "—"}.
+                Observed values are point measurements at the station, in µg/m³, kept in a
+                separate table from the modelled CAMS series. They are never merged into a single
+                air-quality figure.
               </p>
             </section>
 

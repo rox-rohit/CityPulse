@@ -264,12 +264,32 @@ def stations() -> list[dict[str, Any]]:
             ).mappings().all()
         ]
 
+    # Observation availability per station, so the UI can show freshness or an
+    # honest empty state instead of implying readings exist.
+    with engine.connect() as conn:
+        obs_rows = conn.execute(
+            text(
+                """
+                SELECT station_id,
+                       count(*)                                        AS observation_count,
+                       count(*) FILTER (WHERE value IS NOT NULL)        AS value_count,
+                       max(observed_at)                                AS latest_observed_at,
+                       array_agg(DISTINCT variable)
+                           FILTER (WHERE value IS NOT NULL)            AS variables
+                FROM air_quality_observations
+                GROUP BY station_id
+                """
+            )
+        ).mappings().all()
+    observations = {row["station_id"]: dict(row) for row in obs_rows}
+
     # Distance to the AOI boundary, from the stored SRID-4326 polygon. A station
     # inside (or on) the AOI gets exactly 0 km; see station_geo.py.
     distances = station_aoi_distances(engine, rows)
     result = []
     for s in rows:
         geo = distances[s["station_id"]]
+        obs = observations.get(s["station_id"])
         result.append(
             {
                 "station_id": s["station_id"],
@@ -285,6 +305,14 @@ def stations() -> list[dict[str, Any]]:
                 "distance_metric": "km to nearest AOI boundary; 0 when inside the AOI",
                 # Backwards-compatible alias, now carrying the corrected value.
                 "distance_km_from_AOI": geo["distance_km_to_aoi_boundary"],
+                "observation_count": int(obs["observation_count"]) if obs else 0,
+                "value_count": int(obs["value_count"]) if obs else 0,
+                "latest_observed_at": (
+                    str(obs["latest_observed_at"])
+                    if obs and obs["latest_observed_at"]
+                    else None
+                ),
+                "observed_variables": sorted(obs["variables"]) if obs and obs["variables"] else [],
                 "inserted_at": str(s["inserted_at"]) if s["inserted_at"] else None,
             }
         )

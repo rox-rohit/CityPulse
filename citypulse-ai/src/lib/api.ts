@@ -131,6 +131,12 @@ export interface EnvironmentStation {
   distance_metric: string;
   /** @deprecated alias of distance_km_to_aoi_boundary. */
   distance_km_from_AOI: number | null;
+  /** Total stored observation rows for this station. */
+  observation_count: number;
+  /** Observation rows that carry a non-null value. */
+  value_count: number;
+  latest_observed_at: string | null;
+  observed_variables: string[];
   inserted_at: string | null;
 }
 
