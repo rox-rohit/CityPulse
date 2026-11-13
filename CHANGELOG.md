@@ -2,6 +2,48 @@
 
 All notable changes to CityPulse AI. Dates are ISO-8601.
 
+## [0.3.0] - 2026-11-13
+
+### Added
+- Environmental intelligence: `environment_ingest.py` fetches CAMS global air
+  quality (PM2.5, PM10, NO₂, CO, O₃, hourly) and ERA5/IFS temperature (daily)
+  from Open-Meteo and stores them in `environmental_observations` with source,
+  dataset, data type, unit and fetch timestamp. 984 rows ingested for the AOI
+  centroid (960 hourly pollutant values, 24 daily temperature values).
+- `environment_datasets` provenance table and `/api/environment/sources`;
+  `/api/environment/overview` returns air quality, temperature series, derived
+  green cover, WHO 2021 24-hour guideline comparisons and an explicit list of
+  unavailable variables (land-surface temperature, NDVI, local PM10 monitor).
+- `POST /api/environment/refresh` re-fetches both series and records provenance.
+- Civic issue reporting on PostGIS: `POST /api/civic-issues` (six categories,
+  severity, coordinates, optional reporter), duplicate detection (same category,
+  60 m, 30 days) that links instead of discarding, list filters, `/stats`,
+  DBSCAN `/hotspots` and a moderated `PATCH /status` state machine that rejects
+  illegal transitions with HTTP 409.
+- Grounded analyst: `POST /api/analyst/ask` classifies questions and answers with
+  SQL over the stored datasets, citing dataset, observation date, data type and
+  limitations; unanswerable questions are refused with `intent: null`.
+- Rewritten Environment, Civic Issues, AI Analyst and Scenario Lab pages:
+  real values with provenance badges, a reporting form with click-to-place map,
+  moderation controls, hotspot overlay, cited analyst answers and a Scenario Lab
+  whose formulas, baseline dataset and assumptions are printed on the page.
+- Backend tests for environment provenance, the civic lifecycle, duplicate
+  detection, validation, filters, hotspots and analyst citations/refusals (28
+  tests total).
+- Documentation: `docs/data-sources.md`, `docs/aoi-boundary-investigation.md`,
+  and screenshots for the four rewritten pages.
+
+### Changed
+- CORS now allows `PATCH` so the moderation workflow works from the browser.
+- Environment, Civic Issues, AI Analyst and Scenario Lab removed their
+  “illustrative data” banners because they now read real data.
+
+### Known gaps
+- Land-surface temperature, NDVI and local PM10 monitoring remain unavailable and
+  are reported as such rather than estimated.
+- Traffic volumes are still absent; no congestion figure is produced anywhere.
+- The AOI remains a documented rectangle pending an authoritative polygon.
+
 ## [0.2.0] - 2026-11-13
 
 ### Added

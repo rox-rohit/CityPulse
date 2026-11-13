@@ -72,6 +72,18 @@ Bugs found and fixed during this work (the previous scripts could not have run):
 - Digital Twin 3D: CesiumJS (lazy-loaded) with Esri World Imagery, extruded
   buildings (OSM height where tagged, otherwise clearly labelled illustrative
   extrusion), road polylines, facility points and the AOI outline.
+- Environment: real CAMS/ERA5-modelled values with provenance badges, WHO
+  guideline comparison, temperature series, derived green cover and an
+  explicit “not available” block (land-surface temperature, NDVI, local PM10).
+- Civic Issues: reporting form with click-to-place map, filters, moderation
+  controls, duplicate linkage, live statistics and a DBSCAN hotspot overlay.
+- AI Analyst: questions classified and answered by SQL over the stored data,
+  with dataset, observation date, data type and limitations; refusals for
+  unanswerable questions.
+- Scenario Lab: real baseline values plus published formulas; the air-quality
+  response is an explicitly labelled assumption, and temperature effects are
+  not modelled at all.
+- Traffic: uses real `/api/analytics/network` statistics (previously simulated).
 - All pages now build; previously the build failed.
 
 ## Verification actually run
@@ -80,34 +92,53 @@ Bugs found and fixed during this work (the previous scripts could not have run):
 |-------|--------|
 | `npx tsc --noEmit` | pass, 0 errors |
 | `npm run build` | pass (`dist/` produced) |
-| `pytest tests -q` (backend) | **16 passed** |
+| `pytest tests -q` (backend) | **28 passed** |
 | `vitest run` (frontend) | **4 passed** |
 | API responses via curl | health, summary, layers, roads GeoJSON, green-cover all 200 |
+| API (milestone 2) via curl | `/api/environment/overview`, `/api/environment/sources`, civic create/duplicate/409-status/hotspots, `/api/analyst/ask` (answered + refused) all behave as designed |
 | Browser (Digital Twin 2D) | real geometry rendered, 893 overlay paths, no console errors |
 | Browser (Digital Twin 3D) | satellite basemap, AOI outline, roads, buildings, facilities rendered |
+| Browser (Environment) | PM2.5/PM10/NO₂ modelled values, WHO comparison, temperature table, sources list |
+| Browser (Civic Issues) | map click set coordinates, report submitted (reference returned), list and counters refreshed, `mark verified` transition applied |
+| Browser (AI Analyst) | question answered with facts, source and uncertainty list |
+| Browser (Scenario Lab) | baseline read from API, formulas rendered, simulated output recomputed on parameter change |
+| Responsive check | 390 × 844 on Scenario Lab and Civic Issues: no horizontal overflow (`scrollWidth ≤ innerWidth`) |
+| Console | no errors on the inspected pages (only the pre-existing React Router v7 future-flag warning) |
 
 ## Still not done / limitations
 
-1. **Traffic, Environment, Civic Issues, Scenario Lab and AI Analyst pages still
-   use their original simulated datasets.** Only the Digital Twin is wired to
-   real ingested data. The pages label this as simulated, but no live or
-   measured source feeds them yet.
-2. No machine-learning models are trained (no validated target variables yet).
-3. OSM coverage in Gwalior is sparse: 127 buildings and 25 facilities in a
+1. **No environmental value is a local measurement.** Air quality and
+   temperature are modelled grid fields (CAMS ~40 km, ERA5 ~9–11 km) sampled at
+   the AOI centroid; a Gwalior monitoring station would be needed for observed
+   values.
+2. Land-surface temperature, NDVI and local PM10 monitoring are unavailable and
+   are shown as unavailable — they are not estimated.
+3. No machine-learning models are trained (no validated target variables yet).
+4. No traffic volumes, speeds or congestion measurements exist; the Traffic page
+   reports network geometry statistics only.
+5. OSM coverage in Gwalior is sparse: 127 buildings and 25 facilities in a
    4.4 km² area is far below the real building count, and only 1 of those
    buildings has an OSM height. The 3D extrusion is mostly illustrative.
-4. Environmental measurements (PM2.5, heat) have no data source; none are shown
-   as measured values.
-5. The AOI is a 0.02° × 0.02° rectangle, not a hand-traced boundary.
-6. No remote Git repository is configured, so nothing has been pushed.
-7. No automated end-to-end (browser) test suite yet; browser checks were manual.
+6. The AOI is a 0.02° × 0.02° rectangle, not a hand-traced boundary; no
+   authoritative Maharaj Bada/Lashkar polygon was found in OSM
+   (`docs/aoi-boundary-investigation.md`).
+7. The civic database ships empty: no citizen reports or demonstration rows are
+   preloaded, so the page shows an empty state until someone submits a report.
+8. Citizen reports are unverified self-selections; moderation status is the only
+   verification signal.
+9. Scenario Lab air-quality response rests on a user-set coefficient; no local
+   study establishes it.
+10. No automated end-to-end (browser) test suite yet; browser checks were manual.
+11. No ML prediction, no population model, and the analyst only answers from the
+    bundled datasets.
 
 ## Next priorities
 
-1. Wire Traffic, Environment and Civic Issues pages to real geometry and
-   analytical endpoints (road-length by class is already available).
-2. Replace simulated civic issues with a real reporting store.
+1. Connect a Gwalior CPCB/GPCB station or CAAQMS feed for observed air quality.
+2. Obtain authoritative ward or study-area boundaries so the AOI can become a
+   real polygon.
 3. Add a validated ML target (e.g. road-class or land-use classification) with
    time/spatial splits.
-4. Trace a precise AOI polygon and expand to the wider Lashkar region.
-5. Configure the GitHub remote and push verified commits.
+4. Add traffic counts, even a small manual survey, to make any congestion claim
+   possible.
+5. Add an automated browser test (Playwright) for the reporting and analyst flows.

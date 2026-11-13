@@ -1,169 +1,317 @@
-import React, { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { api, type EnvironmentOverview, type EnvironmentSource } from "../lib/api";
 
-const Environment: React.FC = () => {
-  const [data, setData] = useState<any[]>([]);
+const LABELS: Record<string, string> = {
+  pm2_5: "PM2.5",
+  pm10: "PM10",
+  nitrogen_dioxide: "NO₂",
+  carbon_monoxide: "CO",
+  ozone: "O₃",
+};
+
+const UNIT_LABEL: Record<string, string> = {
+  land_surface_temperature: "Land surface temperature",
+  ndvi: "NDVI (vegetation index)",
+  pm10_local_monitor: "Local PM10 monitor",
+};
+
+function Sparkline({ days }: { days: EnvironmentOverview["temperature"]["days"] }) {
+  const values = days.map((day) => day.max).filter((value): value is number => typeof value === "number");
+  if (values.length < 2) return null;
+  const width = 320;
+  const height = 70;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const points = values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * width;
+      const y = height - ((value - min) / span) * (height - 8) - 4;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-16" role="img" aria-label="Daily maximum temperature">
+      <polyline points={points} fill="none" stroke="#39D5FF" strokeWidth="2" />
+      <text x="0" y="10" fill="#9AA9BE" fontSize="9">
+        {max.toFixed(1)} °C
+      </text>
+      <text x="0" y={height - 1} fill="#9AA9BE" fontSize="9">
+        {min.toFixed(1)} °C
+      </text>
+    </svg>
+  );
+}
+
+const Environment = () => {
+  const [overview, setOverview] = useState<EnvironmentOverview | null>(null);
+  const [sources, setSources] = useState<EnvironmentSource[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showDetails, setShowDetails] = useState<Map<string, any>>(new Map());
 
-  useEffect(() => {
-    // In a real implementation, this would fetch environmental data from the backend
-    // For now, we'll simulate with placeholder data grounded in the Maharaj Bada AOI
-    const simulatedData = [
-      {
-        id: "env-1",
-        location: "Maharaj Bada",
-        parameter: "PM2.5",
-        value: "42",
-        unit: "µg/m³",
-        category: "Good",
-        timestamp: "2024-01-15",
-        source: "OpenStreetMap environmental monitoring stations",
-        spatialResolution: "Neighborhood-scale (~500m)",
-        notes: "WHO PM2.5 guideline: ≤5 µg/m³ annual average",
-      },
-      {
-        id: "env-2",
-        location: "Lashkar",
-        parameter: "PM2.5",
-        value: "67",
-        unit: "µg/m³",
-        category: "Moderate",
-        timestamp: "2024-01-15",
-        source: "OpenStreetMap environmental monitoring stations",
-        spatialResolution: "Neighborhood-scale (~500m)",
-        notes: "Exceeds WHO annual average guideline; moderate category",
-      },
-      {
-        id: "env-3",
-        parameter: "Urban Heat Island",
-        location: "City Center",
-        parameter: "Temperature Delta",
-        value: "6.3",
-        unit: "°C above ambient",
-        category: "Elevated",
-        timestamp: "2024-01-15",
-        source: "OpenStreetMap temperature monitoring",
-        spatialResolution: "Site-specific",
-        notes: "Measured at 2m height; summer values typically higher",
-      },
-      {
-        id: "env-4",
-        parameter: "Green Cover",
-        location: "Maharaj Bada Study Area",
-        parameter: "Vegetation Percentage",
-        value: "18",
-        unit: "%",
-        category: "Limited",
-        timestamp: "2024-01-15",
-        source: "OSMnx analysis of OpenStreetMap land use",
-        spatialResolution: "AOI-wide (~2km radius)",
-        notes: "Based on OSM landuse/leisure tags; actual coverage may vary",
-      },
-    ];
-
-    setData(simulatedData);
-    setLoading(false);
+  const load = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const [data, datasetInfo] = await Promise.all([
+        api.environmentOverview(14, signal),
+        api.environmentSources(signal),
+      ]);
+      setOverview(data);
+      setSources(datasetInfo);
+      setError(null);
+    } catch (loadError) {
+      if ((loadError as Error).name === "AbortError") return;
+      setError(loadError instanceof Error ? loadError.message : "Failed to load environmental data");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen py-8 flex items-center justify-center">
-        <div className="text-muted-foreground">
-          <div className="animate-spin rounded-full border-4 border-border border-t-transparent w-12 h-12 mb-4" />
-          <span>Loading environmental data...</span>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
-  if (error) {
-    return (
-      <div className="min-h-screen py-8">
-        <div className="max-w-6xl mx-auto px-4 mb-4">
-          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
-            <strong className="font-semibold">Illustrative values, not measurements.</strong> CityPulse
-            has no air-quality, temperature or sensor feed connected yet, so the figures below are
-            placeholders for layout review. Only the mapped green-space statistics are derived from
-            ingested data.
-          </div>
-        </div>
-        <p className="text-red-500">Error loading environmental data: {error}</p>
-      </div>
-    );
-  }
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await api.refreshEnvironment(7);
+      await load();
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const pollutants = overview?.air_quality.pollutants ?? [];
+  const primaryPollutants = useMemo(
+    () => pollutants.filter((item) => ["pm2_5", "pm10", "nitrogen_dioxide"].includes(item.variable)),
+    [pollutants],
+  );
 
   return (
-    <section className="py-8">
-      <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-2xl font-bold mb-6 text-primary">Environmental Intelligence</h2>
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-accent-cyan/80 mb-1">Environment</p>
+            <h1 className="text-2xl md:text-3xl font-semibold">Environmental Intelligence</h1>
+            <p className="text-sm text-muted-foreground mt-2 max-w-3xl">
+              Air quality and temperature for the AOI centroid, sampled from the Copernicus CAMS and
+              ERA5 model grids via Open-Meteo. Green cover is derived from mapped OpenStreetMap
+              polygons. Values are labelled modelled or derived — none are local sensor readings.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={refreshing}
+            className="px-4 py-2 rounded-lg bg-primary text-background text-sm font-medium disabled:opacity-60"
+          >
+            {refreshing ? "Refreshing…" : "Refresh from source"}
+          </button>
+        </header>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {data.map((reading) => {
-            const categoryClass =
-              reading.category === "Good"
-                ? "bg-green-100/30 border-green-500/20"
-                : reading.category === "Moderate"
-                ? "bg-yellow-100/30 border-yellow-500/20"
-                : reading.category === "Elevated"
-                ? "bg-red-100/30 border-red-500/20"
-                : "bg-gray-100/30 border-gray-500/20";
-
-            return (
-              <div
-                key={reading.id}
-                className={`p-6 rounded-2xl bg-card border border-border ${categoryClass} hover:transform hover:transition-all hover:border-primary/50 transition-all cursor-pointer`}
-                onClick={() => setShowDetails(prev => new Map(prev).set(reading.id, reading))
-              }
-              >
-                <div className="flex items-between justify-between mb-3">
-                  <h3 className="font-medium">{reading.parameter}</h3>
-                  <span className="text-xs text-muted-foreground">{reading.category}</span>
-                </div>
-                <p className="text-3xl font-bold">{reading.value} {reading.unit}</p>
-                <p className="text-sm text-muted-foreground">({reading.timestamp})</p>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Detail panel - expanded on click */}
-        {showDetails.size > 0 && (
-          <div className="mt-8 p-6 rounded-2xl bg-card border border-border">
-            <h3 className="font-medium mb-4 text-primary">Detail: {Array.from(showDetails.keys())[0]}</h3>
-            <div className="grid md:grid-cols-2 gap-4 text-sm">
-              {Array.from(showDetails.entries()).map(([id, reading]) => (
-                <div key={id}>
-                  <p className="font-medium text-secondary-500">{reading.parameter}</p>
-                  <p className="text-muted-foreground">
-                    <span className="font-medium">Value:</span> {reading.value} {reading.unit}
-                  </p>
-                  <br />
-                  <span className="font-medium">Category:</span> {reading.category}
-                  <br />
-                  <span className="font-medium">Location:</span> {reading.location}
-                  <br />
-                  <span className="font-medium">Timestamp:</span> {reading.timestamp}
-                  <br />
-                  <span className="font-medium">Spatial Resolution:</span> {reading.spatialResolution}
-                  <br />
-                  <span className="font-medium">Source:</span> {reading.source}
-                  <br />
-                  <span className="font-medium notes">Notes:</span> {reading.notes}
-                </div>
-              ))}
-            </div>
-
-            <button
-              className="mt-4 w-full text-primary hover:text-white transition-colors py-2 rounded font-medium"
-              onClick={() => setShowDetails(new Map())}
-            >
-              Close details
-            </button>
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {error}
           </div>
         )}
+
+        {loading ? (
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            Loading observations…
+          </div>
+        ) : (
+          <>
+            {!overview?.available && (
+              <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                No environmental observations are stored yet. POST{" "}
+                <code className="text-accent-cyan">/api/environment/refresh</code> or run{" "}
+                <code className="text-accent-cyan">python environment_ingest.py</code>.
+              </div>
+            )}
+
+            <section className="mb-8">
+              <h2 className="text-lg font-medium mb-3">Air quality — modelled (CAMS global)</h2>
+              <div className="grid md:grid-cols-3 gap-4">
+                {primaryPollutants.map((pollutant) => (
+                  <div key={pollutant.variable} className="rounded-xl border border-border bg-card p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          {LABELS[pollutant.variable] ?? pollutant.variable}
+                        </p>
+                        <p className="text-3xl font-semibold mt-1">
+                          {pollutant.latest ?? "—"}
+                          <span className="text-sm font-normal text-muted-foreground ml-1">
+                            {pollutant.unit}
+                          </span>
+                        </p>
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-accent-violet/20 text-accent-violet">
+                        {pollutant.data_type}
+                      </span>
+                    </div>
+                    <dl className="mt-3 space-y-1 text-xs text-muted-foreground">
+                      <div className="flex justify-between">
+                        <dt>24 h mean</dt>
+                        <dd className="text-foreground">{pollutant.mean_24h ?? "—"} {pollutant.unit}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt>24 h range</dt>
+                        <dd className="text-foreground">
+                          {pollutant.min_24h ?? "—"} – {pollutant.max_24h ?? "—"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt>Hourly samples</dt>
+                        <dd className="text-foreground">{pollutant.samples_24h}</dd>
+                      </div>
+                      {pollutant.guideline && (
+                        <div className="flex justify-between">
+                          <dt>WHO 24 h AQG</dt>
+                          <dd className={pollutant.exceeds_guideline ? "text-red-400" : "text-accent-teal"}>
+                            {pollutant.guideline.value} {pollutant.unit}
+                            {pollutant.exceeds_guideline ? " · exceeded" : " · within"}
+                          </dd>
+                        </div>
+                      )}
+                      <div className="flex justify-between pt-1 border-t border-border">
+                        <dt>Latest hour</dt>
+                        <dd>{pollutant.latest_time?.replace("T", " ").slice(0, 16) ?? "—"}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                CAMS is a ~40 km gridded model, interpolated to the AOI centroid. Street-level
+                concentrations can differ substantially. Fetched{" "}
+                {pollutants[0]?.fetched_at?.slice(0, 16).replace("T", " ") ?? "—"}.
+              </p>
+            </section>
+
+            <section className="mb-8 grid md:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-lg font-medium">Temperature</h2>
+                  <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-accent-violet/20 text-accent-violet">
+                    modelled
+                  </span>
+                </div>
+                <Sparkline days={overview?.temperature.days ?? []} />
+                <div className="mt-2 max-h-40 overflow-auto text-xs">
+                  <table className="w-full">
+                    <thead className="text-muted-foreground">
+                      <tr>
+                        <th className="text-left font-medium py-1">Date</th>
+                        <th className="text-right font-medium">Min</th>
+                        <th className="text-right font-medium">Mean</th>
+                        <th className="text-right font-medium">Max</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(overview?.temperature.days ?? []).slice(-7).reverse().map((day) => (
+                        <tr key={day.date} className="border-t border-border">
+                          <td className="py-1">{day.date}</td>
+                          <td className="text-right">{day.min ?? "—"}</td>
+                          <td className="text-right">{day.mean ?? "—"}</td>
+                          <td className="text-right">{day.max ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  2 m air temperature from ERA5/IFS. Not a land-surface or urban-heat-island measurement.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-lg font-medium">Green cover</h2>
+                  <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-accent-teal/20 text-accent-teal">
+                    derived
+                  </span>
+                </div>
+                <p className="text-3xl font-semibold">
+                  {overview?.green_cover.mapped_share_of_aoi_percent ?? "—"}
+                  <span className="text-sm font-normal text-muted-foreground ml-1">% of AOI</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {overview?.green_cover.mapped_green_area_ha ?? "—"} ha across{" "}
+                  {overview?.green_cover.polygons ?? 0} mapped polygons
+                </p>
+                <ul className="mt-3 space-y-1 text-xs">
+                  {(overview?.green_cover.largest_areas ?? []).map((area, index) => (
+                    <li key={`${area.name ?? "area"}-${index}`} className="flex justify-between gap-3">
+                      <span className="text-muted-foreground truncate">
+                        {area.name ?? "unnamed"} · {area.category}
+                      </span>
+                      <span>{area.area_ha} ha</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Lower bound: street trees and unmapped vegetation are not counted.
+                </p>
+              </div>
+            </section>
+
+            <section className="mb-8">
+              <h2 className="text-lg font-medium mb-3">Not available</h2>
+              <div className="space-y-2">
+                {(overview?.unavailable ?? []).map((gap) => (
+                  <div
+                    key={gap.variable}
+                    className="rounded-lg border border-border bg-secondary px-4 py-3 text-xs"
+                  >
+                    <p className="font-medium text-foreground">
+                      {UNIT_LABEL[gap.variable] ?? gap.variable}
+                      <span className="ml-2 text-muted-foreground font-normal">unavailable</span>
+                    </p>
+                    <p className="text-muted-foreground mt-1">{gap.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-medium mb-3">Sources</h2>
+              <div className="space-y-2 text-xs">
+                {sources.map((source) => (
+                  <div key={source.id} className="rounded-lg border border-border bg-card px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">{source.name}</p>
+                      <a
+                        href={source.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        documentation ↗
+                      </a>
+                    </div>
+                    <p className="text-muted-foreground mt-1">
+                      {source.provider} · {source.data_type} · {source.temporal_resolution} ·{" "}
+                      {source.record_count ?? 0} stored rows
+                    </p>
+                    <p className="text-muted-foreground mt-1">{source.known_limitations}</p>
+                    <p className="text-muted-foreground mt-1 text-[11px]">
+                      {source.license} · {source.attribution}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
       </div>
-    </section>
+    </div>
   );
 };
 

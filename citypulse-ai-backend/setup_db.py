@@ -118,6 +118,76 @@ STATEMENTS = [
         geometry geometry(Polygon, 4326)
     )
     """,
+    # Environmental observations (modelled reanalysis, not local sensors).
+    """
+    CREATE TABLE IF NOT EXISTS environmental_observations (
+        id SERIAL PRIMARY KEY,
+        variable TEXT NOT NULL,
+        value DOUBLE PRECISION,
+        unit TEXT,
+        observed_at TIMESTAMPTZ NOT NULL,
+        granularity TEXT NOT NULL,
+        source TEXT NOT NULL,
+        dataset TEXT NOT NULL,
+        data_type TEXT NOT NULL,
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (variable, observed_at, source)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_env_obs_variable_time "
+    "ON environmental_observations (variable, observed_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS environment_datasets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        variables TEXT[],
+        data_type TEXT NOT NULL,
+        temporal_resolution TEXT,
+        spatial_resolution TEXT,
+        coverage TEXT,
+        license TEXT,
+        attribution TEXT,
+        known_limitations TEXT,
+        last_fetched TIMESTAMPTZ,
+        record_count INTEGER
+    )
+    """,
+    # Citizen-reported civic issues.
+    """
+    CREATE TABLE IF NOT EXISTS civic_issues (
+        id SERIAL PRIMARY KEY,
+        reference TEXT NOT NULL UNIQUE,
+        category TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'medium',
+        status TEXT NOT NULL DEFAULT 'reported',
+        reporter_name TEXT,
+        reporter_contact TEXT,
+        is_demo BOOLEAN NOT NULL DEFAULT false,
+        duplicate_of INTEGER REFERENCES civic_issues (id) ON DELETE SET NULL,
+        moderation_note TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        verified_at TIMESTAMPTZ,
+        resolved_at TIMESTAMPTZ,
+        geometry geometry(Point, 4326) NOT NULL,
+        CONSTRAINT civic_issues_category_check CHECK (
+            category IN ('pothole','garbage','drainage','streetlight','water_supply','road_damage')
+        ),
+        CONSTRAINT civic_issues_severity_check CHECK (severity IN ('low','medium','high')),
+        CONSTRAINT civic_issues_status_check CHECK (
+            status IN ('reported','verified','in_progress','resolved','rejected')
+        )
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_civic_issues_geom ON civic_issues USING GIST (geometry)",
+    "CREATE INDEX IF NOT EXISTS idx_civic_issues_status ON civic_issues (status)",
+    "CREATE INDEX IF NOT EXISTS idx_civic_issues_category ON civic_issues (category)",
+    "CREATE INDEX IF NOT EXISTS idx_civic_issues_created ON civic_issues (created_at DESC)",
     # Spatial indexes (GiST) for every geometry column.
     "CREATE INDEX IF NOT EXISTS idx_roads_geom ON roads USING GIST (geometry)",
     "CREATE INDEX IF NOT EXISTS idx_buildings_geom ON buildings USING GIST (geometry)",

@@ -37,11 +37,21 @@ app.add_middleware(
         "http://127.0.0.1:4173",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["*"],
 )
 
 engine = get_engine()
+
+# Feature routers. Environmental observations and civic reporting live in their
+# own modules so the geographic endpoints stay focused.
+from analyst_api import router as analyst_router  # noqa: E402
+from civic_api import router as civic_router  # noqa: E402
+from environment_api import router as environment_router  # noqa: E402
+
+app.include_router(environment_router)
+app.include_router(civic_router)
+app.include_router(analyst_router)
 
 OSM_ATTRIBUTION = "© OpenStreetMap contributors (ODbL)"
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -371,6 +381,9 @@ def root() -> dict[str, Any]:
             "/api/health", "/api/summary", "/api/layers",
             "/api/layers/{layer}/geojson", "/api/aoi",
             "/api/metadata/{layer}", "/api/analytics/network",
-            "/api/analytics/green-cover",
+            "/api/analytics/green-cover", "/api/environment/overview",
+            "/api/environment/sources", "/api/civic-issues",
+            "/api/civic-issues/stats", "/api/civic-issues/hotspots",
+            "/api/analyst/ask", "/api/analyst/capabilities",
         ],
     }

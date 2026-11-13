@@ -22,7 +22,23 @@ with the **Maharaj Bada / Lashkar** Area of Interest (4.434 km²).
 - A FastAPI service that returns real GeoJSON for those layers.
 - A Digital Twin that renders that geometry in 2D (Leaflet) and 3D (CesiumJS,
   extruded buildings), with layer toggles and a feature inspector.
-- Backend tests: 16 passing. Frontend tests: 4 passing. Production build passes.
+- **Environmental intelligence** from Copernicus CAMS (air quality) and ERA5/IFS
+  (temperature) via Open-Meteo: **984 stored observations** (960 hourly pollutant
+  rows, 24 daily temperature rows), every value labelled *modelled* with its
+  dataset, timestamp and WHO guideline comparison. Land-surface temperature and
+  NDVI are reported as unavailable rather than estimated.
+- **Civic issue reporting**: real PostGIS-backed submissions with map placement,
+  six categories, severity, moderation transitions, 60 m / 30-day duplicate
+  linkage and DBSCAN hotspot analysis. No demonstration rows are shipped.
+- **AI Analyst** that answers from SQL over those datasets, cites dataset and
+  observation date, states uncertainty and refuses questions it cannot answer
+  from stored data.
+- **Scenario Lab** grounded in the real baseline (AOI area, mapped green share,
+  network length, CAMS PM2.5) with published formulas and an assumption-based,
+  clearly labelled air-quality response.
+- Backend tests: 28 passing. Frontend tests: 4 passing. Production build passes.
+- AOI boundary investigation documented in `docs/aoi-boundary-investigation.md`;
+  data provenance in `docs/data-sources.md`.
 
 ## Quick start
 
@@ -49,11 +65,32 @@ Detailed instructions, environment notes and troubleshooting are in
 
 OpenStreetMap via the OpenStreetMap France PBF extract
 (© OpenStreetMap contributors, ODbL 1.0). Geometry is stored in EPSG:4326 and
-measured in EPSG:32644. No synthetic values are presented as measurements;
-illustrative building heights are labelled as such.
+measured in EPSG:32644.
+
+Air quality (CAMS global, ~40 km) and temperature (ERA5/IFS, ~9–11 km) come from
+Open-Meteo and are **modelled fields sampled at the AOI centroid** — not local
+station readings. Green cover is derived from mapped OSM polygons and is a lower
+bound. No synthetic value is presented as a measurement; illustrative building
+heights and scenario outputs are labelled as such. Full provenance, units,
+resolution and limitations: `docs/data-sources.md`.
+
+## Screenshots
+
+| Page | Image |
+|------|-------|
+| Digital Twin (3D) | `docs/screenshots/digital-twin-3d.png` |
+| Environment | `docs/screenshots/environment.png` |
+| Civic Issues | `docs/screenshots/civic-issues.png` |
+| AI Analyst | `docs/screenshots/ai-analyst.png` |
+| Scenario Lab | `docs/screenshots/scenario-lab.png` |
 
 ## Known gaps
 
-Traffic, Environment, Civic Issues, Scenario Lab and AI Analyst pages still use
-simulated datasets. No ML models are trained. See
-`citypulse-ai-DEVELOPMENT_STATUS.md` for the complete list.
+- No local air-quality or traffic sensor feed: environmental values are modelled
+  grid fields, and no traffic volumes exist at all.
+- No NDVI, land-surface temperature or thermal imagery product is configured.
+- The AOI is still a documented rectangle: no authoritative Maharaj Bada/Lashkar
+  polygon was found (see `docs/aoi-boundary-investigation.md`).
+- No ML models are trained; the Scenario Lab is arithmetic with stated assumptions.
+- The civic database intentionally ships empty — reports only exist once someone
+  submits them. See `citypulse-ai-DEVELOPMENT_STATUS.md` for the full list.
