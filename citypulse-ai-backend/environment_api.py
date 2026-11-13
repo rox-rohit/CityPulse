@@ -116,7 +116,7 @@ def _temperature(days: int = 14) -> dict[str, Any]:
                 SELECT observed_at::date AS day, variable, value, unit, data_type, dataset, source
                 FROM environmental_observations
                 WHERE granularity = 'daily'
-                  AND variable LIKE 'temperature_2m_%%'
+                  AND variable LIKE 'temperature_2m_%'
                   AND observed_at >= now() - (:days || ' days')::interval
                 ORDER BY observed_at
                 """
@@ -143,7 +143,7 @@ def _temperature(days: int = 14) -> dict[str, Any]:
 def _green_cover() -> dict[str, Any]:
     with engine.connect() as conn:
         mapped = conn.execute(text("SELECT COALESCE(sum(area_m2), 0) FROM green_spaces")).scalar() or 0
-        aoi_area_km2 = conn.execute(text("SELECT area_km2::float FROM aoi_boundary LIMIT 1")).scalar()
+        aoi_area_km2 = conn.execute(text("SELECT area_km2::float FROM aoi_boundary LIMIT 1")).scalar() or 0
         count = conn.execute(text("SELECT count(*) FROM green_spaces")).scalar() or 0
         largest = conn.execute(
             text(
@@ -152,10 +152,10 @@ def _green_cover() -> dict[str, Any]:
                 "WHERE area_m2 IS NOT NULL ORDER BY area_m2 DESC LIMIT 5"
             )
         ).all()
-    aoi_m2 = (aoi_area_km2 or 0) * 1_000_000
+    aoi_m2 = aoi_area_km2 * 1_000_000
     return {
         "mapped_green_area_ha": round(float(mapped) / 10_000, 2),
-        "aoi_area_ha": round((aoi_area_km2 or 0) * 100, 2),
+        "aoi_area_ha": round(aoi_m2 * 0.0001, 2),
         "mapped_share_of_aoi_percent": round(float(mapped) / aoi_m2 * 100, 2) if aoi_m2 else None,
         "polygons": count,
         "largest_areas": [
@@ -201,7 +201,71 @@ def sources() -> list[dict[str, Any]]:
                 "ORDER BY name"
             )
         ).mappings().all()
-    return [dict(row) for row in rows]
+    base = [dict(row) for row in rows]
+    # Append station provenance if stations table exists
+    try:
+        srows = conn.execute(
+            text("SELECT station_id, name, latitude, longitude, operating_agency, source FROM stations")
+        ).mappings().all()
+        for s in srows:
+            base.append(
+                {
+                    "id": s["station_id"],
+                    "name": s["name"],
+                    "provider": s["operating_agency"],
+                    "source_url": "https://app.cpcbccr.com/ccr/#/caaqm-dashboard-all/caaqm-landing/aqi-repository?station=" + s["station_id"],
+                    "variables": ["pm2_5", "pm10", "no2", "so2", "co", "o3"],
+                    "data_type": "observed",
+                    "temporal_resolution": "hourly / daily",
+                    "spatial_resolution": "point measurement",
+                    "coverage": s["name"] + " (" + s["station_id"] + "), Gwalior, MP",
+                    "license": "CPCB (Central Pollution Control Board), ODbL-compatible",
+                    "attribution": "Central Pollution Control Board – Continuous Ambient Air Quality Monitoring Station",
+                    "known_limitations": "Point measurements at specific locations; not a city-wide average. Distance from AOI varies; see /api/environment/stations/{id}/distance endpoint.",
+                    "last_fetched": str(s["inserted_at"]) if s["inserted_at"] else None,
+                    "record_count": None,
+                }
+            )
+    except Exception:  # noqa: BLE001
+        LOG.warning("Could not read stations table for provenance")
+    return base
+
+
+@router.get("/stations", summary="List known CAAQMS monitoring stations for Gwalior")
+def stations() -> list[dict[str, Any]]:
+    ensure_schema(engine)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT station_id, name, latitude, longitude, operating_agency, source, inserted_at FROM stations ORDER BY name"
+            )
+        ).mappings().all()
+    result = []
+    for s in rows:
+        # calculate approximate distance from Maharaj Bada AOI centroid (26.220, 78.180)
+        from math import radians, sin, cos, sqrt, atan2
+
+        R = 6371.0  # km
+        lat1, lon1 = radians(26.220), radians(78.180)
+        lat2, lon2 = radians(s["latitude"]), radians(s["longitude"])
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        distance_km = R * c
+        result.append(
+            {
+                "station_id": s["station_id"],
+                "name": s["name"],
+                "latitude": s["latitude"],
+                "longitude": s["longitude"],
+                "operating_agency": s["operating_agency"],
+                "source": s["source"],
+                "distance_km_from_AOI": round(distance_km, 2),
+                "inserted_at": str(s["inserted_at"]) if s["inserted_at"] else None,
+            }
+        )
+    return result
 
 
 @router.post("/refresh", summary="Fetch the latest observations from Open-Meteo")

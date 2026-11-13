@@ -121,7 +121,9 @@ export type IssueCategory =
   | "streetlight"
   | "water_supply"
   | "road_damage";
+
 export type IssueSeverity = "low" | "medium" | "high";
+
 export type IssueStatus = "reported" | "verified" | "in_progress" | "resolved" | "rejected";
 
 export interface CivicIssue {
@@ -259,6 +261,19 @@ export const api = {
       `/environment/refresh?days=${days}`,
       "POST",
       {},
+
+    ),
+
+  // NEW: Station and observation endpoints
+  environmentStations: (signal?: AbortSignal) =>
+    get<{ station_id: string; name: string; latitude: number; longitude: number; operating_agency: string; source: string; distance_km_from_AOI: number }[]>(
+      `/environment/stations`,
+      signal,
+    ),
+  environmentObservations: (stationId: string, variable: string, signal?: AbortSignal) =>
+    get<{ variable: string; value: number | null; observed_at: string; unit: string; quality_flag: string }[]>(
+      `/environment/observations?station_id=${encodeURIComponent(stationId)}&variable=${encodeURIComponent(variable)}`,
+      signal,
     ),
 
   // Civic issue reporting

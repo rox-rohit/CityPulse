@@ -130,8 +130,12 @@ const Environment = () => {
             {!overview?.available && (
               <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                 No environmental observations are stored yet. POST{" "}
-                <code className="text-accent-cyan">/api/environment/refresh</code> or run{" "}
-                <code className="text-accent-cyan">python environment_ingest.py</code>.
+                <code className="text-accent-cyan">
+                  /api/environment/refresh
+                </code> or run{" "}
+                <code className="text-accent-cyan">
+                  python environment_ingest.py
+                </code>.
               </div>
             )}
 
@@ -159,7 +163,9 @@ const Environment = () => {
                     <dl className="mt-3 space-y-1 text-xs text-muted-foreground">
                       <div className="flex justify-between">
                         <dt>24 h mean</dt>
-                        <dd className="text-foreground">{pollutant.mean_24h ?? "—"} {pollutant.unit}</dd>
+                        <dd className="text-foreground">
+                          {pollutant.mean_24h ?? "—"} {pollutant.unit}
+                        </dd>
                       </div>
                       <div className="flex justify-between">
                         <dt>24 h range</dt>
@@ -248,7 +254,10 @@ const Environment = () => {
                 </p>
                 <ul className="mt-3 space-y-1 text-xs">
                   {(overview?.green_cover.largest_areas ?? []).map((area, index) => (
-                    <li key={`${area.name ?? "area"}-${index}`} className="flex justify-between gap-3">
+                    <li
+                      key={`${area.name ?? "area"}-${index}`}
+                      className="flex justify-between gap-3"
+                    >
                       <span className="text-muted-foreground truncate">
                         {area.name ?? "unnamed"} · {area.category}
                       </span>
@@ -263,21 +272,94 @@ const Environment = () => {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-lg font-medium mb-3">Not available</h2>
-              <div className="space-y-2">
-                {(overview?.unavailable ?? []).map((gap) => (
-                  <div
-                    key={gap.variable}
-                    className="rounded-lg border border-border bg-secondary px-4 py-3 text-xs"
-                  >
-                    <p className="font-medium text-foreground">
-                      {UNIT_LABEL[gap.variable] ?? gap.variable}
-                      <span className="ml-2 text-muted-foreground font-normal">unavailable</span>
-                    </p>
-                    <p className="text-muted-foreground mt-1">{gap.reason}</p>
-                  </div>
-                ))}
+              <h2 className="text-lg font-medium mb-3">Gwalior monitoring stations</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                {sources
+                  .filter((s) => s.data_type === "observed")
+                  .map((source) => (
+                    <div
+                      key={source.id}
+                      className="rounded-lg border border-border bg-card p-4"
+                    >
+                      <p className="font-medium text-foreground">
+                        {source.name}
+                        <span className="text-xs text-muted-foreground ml-2">({source.id})</span>
+                      </p>
+                      <p className="text-muted-foreground mt-1">
+                        Distance from Maharaj Bada:{" "}
+                        {source.known_limitations?.split("·")[0] ?? "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Operating agency: {source.provider}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Spatial resolution: point measurement
+                      </p>
+                    </div>
+                  ))}
               </div>
+            </section>
+
+            <section className="mb-8">
+              <h2 className="text-lg font-medium mb-3">Observed pollutant values</h2>
+              <div className="grid md:grid-cols-3 gap-4">
+                {primaryPollutants.map((pollutant) => (
+                  <div key={pollutant.variable} className="rounded-xl border border-border bg-card p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          {LABELS[pollutant.variable] ?? pollutant.variable}
+                        </p>
+                        <p className="text-3xl font-semibold mt-1">
+                          {pollutant.latest ?? "—"}
+                          <span className="text-sm font-normal text-muted-foreground ml-1">
+                            {pollutant.unit}
+                          </span>
+                        </p>
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-accent-violet/20 text-accent-violet">
+                        {pollutant.data_type}
+                      </span>
+                    </div>
+                    <dl className="mt-3 space-y-1 text-xs text-muted-foreground">
+                      <div className="flex justify-between">
+                        <dt>24 h mean</dt>
+                        <dd className="text-foreground">
+                          {pollutant.mean_24h ?? "—"} {pollutant.unit}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt>24 h range</dt>
+                        <dd className="text-foreground">
+                          {pollutant.min_24h ?? "—"} – {pollutant.max_24h ?? "—"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt>Hourly samples</dt>
+                        <dd className="text-foreground">{pollutant.samples_24h}</dd>
+                      </div>
+                      {pollutant.guideline && (
+                        <div className="flex justify-between">
+                          <dt>WHO 24 h AQG</dt>
+                          <dd className={pollutant.exceeds_guideline ? "text-red-400" : "text-accent-teal"}>
+                            {pollutant.guideline.value} {pollutant.unit}
+                            {pollutant.exceeds_guideline ? " · exceeded" : " · within"}
+                          </dd>
+                        </div>
+                      )}
+                      <div className="flex justify-between pt-1 border-t border-border">
+                        <dt>Latest hour</dt>
+                        <dd>{pollutant.latest_time?.replace("T", " ").slice(0, 16) ?? "—"}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ))
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                CAMS is a ~40 km gridded model, interpolated to the AOI centroid. Street-level
+                concentrations can differ substantially. Fetched{" "}
+                {pollutants[0]?.fetched_at?.slice(0, 16).replace("T", " ") ?? "—"}.
+              </p>
             </section>
 
             <section>
