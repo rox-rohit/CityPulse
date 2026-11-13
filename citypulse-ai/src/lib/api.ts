@@ -114,6 +114,26 @@ export interface EnvironmentSource {
   record_count: number | null;
 }
 
+export interface EnvironmentStation {
+  station_id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  operating_agency: string;
+  source: string;
+  /** True when the station point lies inside or on the AOI boundary. */
+  inside_aoi: boolean | null;
+  /** km to the nearest AOI boundary; 0 when inside the AOI. */
+  distance_km_to_aoi_boundary: number | null;
+  /** Distance to the AOI centroid, shown only for context. */
+  distance_km_from_aoi_centroid: number | null;
+  aoi_srid: number | null;
+  distance_metric: string;
+  /** @deprecated alias of distance_km_to_aoi_boundary. */
+  distance_km_from_AOI: number | null;
+  inserted_at: string | null;
+}
+
 export type IssueCategory =
   | "pothole"
   | "garbage"
@@ -266,10 +286,7 @@ export const api = {
 
   // NEW: Station and observation endpoints
   environmentStations: (signal?: AbortSignal) =>
-    get<{ station_id: string; name: string; latitude: number; longitude: number; operating_agency: string; source: string; distance_km_from_AOI: number }[]>(
-      `/environment/stations`,
-      signal,
-    ),
+    get<EnvironmentStation[]>(`/environment/stations`, signal),
   environmentObservations: (stationId: string, variable: string, signal?: AbortSignal) =>
     get<{ variable: string; value: number | null; observed_at: string; unit: string; quality_flag: string }[]>(
       `/environment/observations?station_id=${encodeURIComponent(stationId)}&variable=${encodeURIComponent(variable)}`,

@@ -59,6 +59,32 @@ Limitations: only explicitly mapped `leisure=park`, `landuse=grass/forest/...`
 and `natural=*` polygons are counted. Street trees and unmapped vegetation are
 excluded, so this is a lower bound and not a canopy measurement.
 
+### Ground stations — CPCB CAAQMS (Gwalior)
+
+| Field | Value |
+|-------|-------|
+| Provider | Central Pollution Control Board, Continuous Ambient Air Quality Monitoring Stations (CCR portal); optional programmatic access via the XKDR India Air Quality API |
+| Stations | 5273 Gwalior City Center (26.2034 N, 78.1933 E), 5275 Gwalior Phool Bagh (26.2105 N, 78.1710 E) |
+| Type | **observed** (point measurements at a fixed station) |
+| Variables | PM2.5, PM10, NO2, SO2, CO, O3 (as published per station) |
+| Temporal resolution | hourly / daily, preserved as published |
+| Units | µg/m³ |
+| Stored | `stations` and `air_quality_observations`, separate from modelled data |
+
+**AOI distance semantics.** The AOI is the documented rectangle, longitude
+78.170–78.190, latitude 26.210–26.230 (SRID 4326), stored in `aoi_boundary`.
+The distance reported for a station is the distance to the **nearest AOI
+boundary**, measured on the WGS84 ellipsoid, and is **exactly 0 km** when the
+station lies inside or on the AOI (`ST_Covers`). It is never the distance to the
+AOI centroid.
+
+- Gwalior Phool Bagh (26.2105, 78.1710) lies **inside** the AOI → 0 km.
+- Gwalior City Center (26.2034, 78.1933) lies ~0.80 km south-east of the AOI →
+  outside, distance measured to the nearest boundary corner (78.190, 26.210).
+
+A station inside the AOI is still a single point measurement: its readings are
+not the air quality of every address in the AOI.
+
 ## Deliberately unavailable
 
 Reported as unavailable by the API and shown as such in the UI:

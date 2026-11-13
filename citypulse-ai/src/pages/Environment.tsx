@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type EnvironmentOverview, type EnvironmentSource } from "../lib/api";
+import {
+  api,
+  type EnvironmentOverview,
+  type EnvironmentSource,
+  type EnvironmentStation,
+} from "../lib/api";
+
+/** Distance label: containment is stated explicitly, never just a number. */
+function stationDistanceLabel(station: EnvironmentStation): string {
+  if (station.inside_aoi === null || station.distance_km_to_aoi_boundary === null) {
+    return "Distance to AOI unknown";
+  }
+  if (station.inside_aoi) {
+    return "Inside the AOI (0 km to boundary)";
+  }
+  return `${station.distance_km_to_aoi_boundary.toFixed(2)} km to nearest AOI boundary`;
+}
 
 const LABELS: Record<string, string> = {
   pm2_5: "PM2.5",
@@ -46,18 +62,21 @@ function Sparkline({ days }: { days: EnvironmentOverview["temperature"]["days"] 
 const Environment = () => {
   const [overview, setOverview] = useState<EnvironmentOverview | null>(null);
   const [sources, setSources] = useState<EnvironmentSource[]>([]);
+  const [stations, setStations] = useState<EnvironmentStation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const [data, datasetInfo] = await Promise.all([
+      const [data, datasetInfo, stationInfo] = await Promise.all([
         api.environmentOverview(14, signal),
         api.environmentSources(signal),
+        api.environmentStations(signal),
       ]);
       setOverview(data);
       setSources(datasetInfo);
+      setStations(stationInfo);
       setError(null);
     } catch (loadError) {
       if ((loadError as Error).name === "AbortError") return;
@@ -273,31 +292,74 @@ const Environment = () => {
 
             <section className="mb-8">
               <h2 className="text-lg font-medium mb-3">Gwalior monitoring stations</h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                {sources
-                  .filter((s) => s.data_type === "observed")
-                  .map((source) => (
-                    <div
-                      key={source.id}
-                      className="rounded-lg border border-border bg-card p-4"
-                    >
-                      <p className="font-medium text-foreground">
-                        {source.name}
-                        <span className="text-xs text-muted-foreground ml-2">({source.id})</span>
-                      </p>
-                      <p className="text-muted-foreground mt-1">
-                        Distance from Maharaj Bada:{" "}
-                        {source.known_limitations?.split("·")[0] ?? "—"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Operating agency: {source.provider}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Spatial resolution: point measurement
-                      </p>
-                    </div>
-                  ))}
-              </div>
+              {stations.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No ground monitoring stations are registered, so ground observations are
+                  unavailable.
+                </p>
+              ) : (
+                <>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {stations.map((station) => (
+                      <div
+                        key={station.station_id}
+                        className="rounded-lg border border-border bg-card p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="font-medium text-foreground">
+                            {station.name}
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({station.station_id})
+                            </span>
+                          </p>
+                          <span
+                            className={
+                              station.inside_aoi
+                                ? "text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-accent-teal/20 text-accent-teal"
+                                : "text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-secondary text-muted-foreground"
+                            }
+                          >
+                            {station.inside_aoi ? "inside AOI" : "outside AOI"}
+                          </span>
+                        </div>
+                        <dl className="mt-3 space-y-1 text-xs text-muted-foreground">
+                          <div className="flex justify-between gap-3">
+                            <dt>Distance to AOI</dt>
+                            <dd className="text-foreground text-right">
+                              {stationDistanceLabel(station)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt>Distance to AOI centroid</dt>
+                            <dd className="text-foreground">
+                              {station.distance_km_from_aoi_centroid?.toFixed(2) ?? "—"} km
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt>Operating agency</dt>
+                            <dd className="text-foreground text-right">
+                              {station.operating_agency ?? "—"}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt>Coordinates</dt>
+                            <dd className="text-foreground">
+                              {station.latitude.toFixed(4)}, {station.longitude.toFixed(4)}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Distance is measured to the nearest AOI boundary on the WGS84 ellipsoid
+                    (SRID {stations[0]?.aoi_srid ?? 4326}) and is exactly 0 km for a station
+                    inside the AOI. The centroid distance is shown only for context. A station
+                    reading is a point measurement at that station, not the air quality of a
+                    specific address elsewhere in the AOI.
+                  </p>
+                </>
+              )}
             </section>
 
             <section className="mb-8">
@@ -353,7 +415,7 @@ const Environment = () => {
                       </div>
                     </dl>
                   </div>
-                ))
+                ))}
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">
                 CAMS is a ~40 km gridded model, interpolated to the AOI centroid. Street-level

@@ -18,6 +18,7 @@ from sqlalchemy import text
 import environment_ingest
 from db_config import get_engine
 from setup_db import ensure_schema
+from station_geo import describe_distance, station_aoi_distances
 
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("environment-api")
@@ -192,6 +193,10 @@ def overview(days: int = 14) -> dict[str, Any]:
 @router.get("/sources", summary="Dataset provenance for every environmental variable")
 def sources() -> list[dict[str, Any]]:
     ensure_schema(engine)
+    base: list[dict[str, Any]] = []
+    srows: list[dict[str, Any]] = []
+    # Read both datasets and stations inside one connection: reusing a connection
+    # after its `with` block closed silently dropped the station entries before.
     with engine.connect() as conn:
         rows = conn.execute(
             text(
@@ -201,13 +206,24 @@ def sources() -> list[dict[str, Any]]:
                 "ORDER BY name"
             )
         ).mappings().all()
-    base = [dict(row) for row in rows]
-    # Append station provenance if stations table exists
-    try:
-        srows = conn.execute(
-            text("SELECT station_id, name, latitude, longitude, operating_agency, source FROM stations")
-        ).mappings().all()
+        base = [dict(row) for row in rows]
+        try:
+            srows = [
+                dict(row)
+                for row in conn.execute(
+                    text(
+                        "SELECT station_id, name, latitude, longitude, operating_agency, "
+                        "source, inserted_at FROM stations ORDER BY name"
+                    )
+                ).mappings().all()
+            ]
+        except Exception:  # noqa: BLE001
+            LOG.warning("Could not read stations table for provenance")
+
+    if srows:
+        distances = station_aoi_distances(engine, srows)
         for s in srows:
+            geo = distances[s["station_id"]]
             base.append(
                 {
                     "id": s["station_id"],
@@ -221,13 +237,16 @@ def sources() -> list[dict[str, Any]]:
                     "coverage": s["name"] + " (" + s["station_id"] + "), Gwalior, MP",
                     "license": "CPCB (Central Pollution Control Board), ODbL-compatible",
                     "attribution": "Central Pollution Control Board – Continuous Ambient Air Quality Monitoring Station",
-                    "known_limitations": "Point measurements at specific locations; not a city-wide average. Distance from AOI varies; see /api/environment/stations/{id}/distance endpoint.",
+                    "known_limitations": (
+                        "Point measurement at a fixed station, not a city-wide average. "
+                        + describe_distance(geo)
+                    ),
                     "last_fetched": str(s["inserted_at"]) if s["inserted_at"] else None,
                     "record_count": None,
+                    "inside_aoi": geo["inside_aoi"],
+                    "distance_km_to_aoi_boundary": geo["distance_km_to_aoi_boundary"],
                 }
             )
-    except Exception:  # noqa: BLE001
-        LOG.warning("Could not read stations table for provenance")
     return base
 
 
@@ -235,24 +254,22 @@ def sources() -> list[dict[str, Any]]:
 def stations() -> list[dict[str, Any]]:
     ensure_schema(engine)
     with engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT station_id, name, latitude, longitude, operating_agency, source, inserted_at FROM stations ORDER BY name"
-            )
-        ).mappings().all()
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                text(
+                    "SELECT station_id, name, latitude, longitude, operating_agency, "
+                    "source, inserted_at FROM stations ORDER BY name"
+                )
+            ).mappings().all()
+        ]
+
+    # Distance to the AOI boundary, from the stored SRID-4326 polygon. A station
+    # inside (or on) the AOI gets exactly 0 km; see station_geo.py.
+    distances = station_aoi_distances(engine, rows)
     result = []
     for s in rows:
-        # calculate approximate distance from Maharaj Bada AOI centroid (26.220, 78.180)
-        from math import radians, sin, cos, sqrt, atan2
-
-        R = 6371.0  # km
-        lat1, lon1 = radians(26.220), radians(78.180)
-        lat2, lon2 = radians(s["latitude"]), radians(s["longitude"])
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        distance_km = R * c
+        geo = distances[s["station_id"]]
         result.append(
             {
                 "station_id": s["station_id"],
@@ -261,7 +278,13 @@ def stations() -> list[dict[str, Any]]:
                 "longitude": s["longitude"],
                 "operating_agency": s["operating_agency"],
                 "source": s["source"],
-                "distance_km_from_AOI": round(distance_km, 2),
+                "inside_aoi": geo["inside_aoi"],
+                "distance_km_to_aoi_boundary": geo["distance_km_to_aoi_boundary"],
+                "distance_km_from_aoi_centroid": geo["distance_km_from_aoi_centroid"],
+                "aoi_srid": geo["aoi_srid"],
+                "distance_metric": "km to nearest AOI boundary; 0 when inside the AOI",
+                # Backwards-compatible alias, now carrying the corrected value.
+                "distance_km_from_AOI": geo["distance_km_to_aoi_boundary"],
                 "inserted_at": str(s["inserted_at"]) if s["inserted_at"] else None,
             }
         )
