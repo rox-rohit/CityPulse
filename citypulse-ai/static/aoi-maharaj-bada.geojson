@@ -1,0 +1,28 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Maharaj Bada Study Area",
+        "city": "Gwalior",
+        "state": "Madhya Pradesh",
+        "area_type": "study_area",
+        "ingestion_status": "pending",
+        "source": "CityPulse AI Initial AOI"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [78.1700, 26.2100],
+            [78.1900, 26.2100],
+            [78.1900, 26.2300],
+            [78.1700, 26.2300],
+            [78.1700, 26.2100]
+          ]
+        ]
+      }
+    }
+  ]
+}

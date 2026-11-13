@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgis/postgis:16-master
+    container_name: citypulse-postgres
+    environment:
+      POSTGIS_PATH: /usr/lib/postgresql-16/postgis-3.x.so
+      POSTGRES_USER: citypulse
+      POSTGRES_PASSWORD: citypulse_password
+      POSTGRES_DB: citypulse
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "citypulse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    dpage/pgadmin4: latest
+    container_name: citypulse-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@citypulse.ai
+      PGADMIN_DEFAULT_PASSWORD: adminpassword
+    ports:
+      - "8080:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local

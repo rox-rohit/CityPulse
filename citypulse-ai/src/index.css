@@ -1,0 +1,136 @@
+/* Tailwind base styles with CityPulse AI design customizations */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Color tokens - dark-first visual system.
+   Stored as HSL triplets so Tailwind can apply opacity modifiers
+   (e.g. bg-primary/10) via hsl(var(--token) / <alpha-value>). */
+:root {
+  --background: 226 49% 8%;        /* #0B1020 */
+  --secondary: 221 46% 12%;        /* #111A2E */
+  --card: 220 42% 15%;             /* #172238 */
+  --primary: 193 100% 61%;         /* #39D5FF */
+  --secondary-accent: 167 66% 52%; /* #35D6B4 */
+  --highlight: 247 100% 74%;       /* #8B7CFF */
+  --text-primary: 218 57% 97%;     /* #F4F7FC */
+  --text-secondary: 215 22% 67%;   /* #9AA9BE */
+  --border: 218 28% 25%;           /* #2D3A50 */
+  --muted: 214 24% 38%;            /* #4A5E78 */
+  --destructive: 0 72% 51%;
+  --radius: 0.75rem;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--text-primary));
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Focus visible - essential for keyboard navigation */
+.focus-visible:focus-visible,
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/* Skip link for screen readers */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  transition: top 0.3s ease;
+}
+
+.skip-link:focus {
+  left: 0;
+  top: 0;
+  width: auto;
+  height: auto;
+  color: hsl(var(--background));
+  background: hsl(var(--primary));
+  padding: 0.5rem 1rem;
+  z-index: 100;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Selection style */
+::selection {
+  background-color: hsl(var(--primary) / 0.3);
+  color: hsl(var(--background));
+}
+
+/* Improved scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--secondary));
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary));
+}
+
+/* Leaflet dark surface overrides so the map chrome matches the app */
+.leaflet-container {
+  background: hsl(var(--background));
+  font-family: inherit;
+}
+
+.leaflet-control-attribution {
+  background: hsl(var(--background) / 0.85) !important;
+  color: hsl(var(--text-secondary)) !important;
+}
+
+.leaflet-control-attribution a {
+  color: hsl(var(--primary)) !important;
+}
+
+.leaflet-control-zoom a {
+  background: hsl(var(--secondary)) !important;
+  color: hsl(var(--text-primary)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: hsl(var(--card)) !important;
+}
+
+.leaflet-tooltip {
+  background: hsl(var(--card));
+  color: hsl(var(--text-primary));
+  border: 1px solid hsl(var(--border));
+}
