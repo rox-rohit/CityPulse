@@ -94,7 +94,7 @@ const Traffic = () => {
           <h1 className="text-2xl md:text-3xl font-semibold">Traffic &amp; Road Network</h1>
           <p className="text-sm text-muted-foreground mt-2 max-w-3xl">
             Road-network statistics computed from the ingested OpenStreetMap geometry for the
-            Maharaj Bada AOI. This page reports network composition and mapped attributes — it does
+            study-area AOI. This page reports network composition and mapped attributes — it does
             not contain traffic volumes, speeds or congestion measurements.
           </p>
         </header>

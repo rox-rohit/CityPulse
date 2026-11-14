@@ -1,8 +1,9 @@
 # CityPulse AI — Frontend
 
 React + Vite + TypeScript frontend for the CityPulse AI urban analytics platform.
-Focused on the **Maharaj Bada / Lashkar** Area of Interest in Gwalior, Madhya
-Pradesh (4.434 km²).
+The Digital Twin works over a 4.434 km² study area: its **Virtual City** is a
+generated district (street grid, downtown core, housing, industry, parks, lake and
+MITS campus), while the 2D and 3D views render the ingested OpenStreetMap layers.
 
 ## Stack
 

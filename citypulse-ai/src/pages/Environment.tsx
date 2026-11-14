@@ -293,7 +293,7 @@ const Environment = () => {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-lg font-medium mb-3">Gwalior monitoring stations</h2>
+              <h2 className="text-lg font-medium mb-3">Monitoring stations</h2>
               {stations.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No ground monitoring stations are registered, so ground observations are

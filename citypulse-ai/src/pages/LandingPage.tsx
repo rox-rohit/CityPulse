@@ -89,7 +89,7 @@ const LandingPage = () => {
           <div className="grid lg:grid-cols-[1.05fr_1fr] gap-10 items-center">
             <div>
               <p className="text-xs uppercase tracking-widest text-accent-cyan/80 mb-3">
-                Maharaj Bada / Lashkar, Gwalior · 4.434 km²
+                Generated study area · 4.434 km²
               </p>
               <h1 className="text-4xl md:text-5xl font-semibold leading-tight tracking-tight">
                 Understand Your City.
@@ -134,12 +134,12 @@ const LandingPage = () => {
             <div className="rounded-2xl border border-border bg-card overflow-hidden">
               <img
                 src="/screenshots/digital-twin-3d.png"
-                alt="CityPulse AI digital twin showing extruded buildings, roads and the AOI boundary over satellite imagery of Maharaj Bada"
+                alt="CityPulse AI digital twin showing extruded buildings, roads and the AOI boundary over an OpenStreetMap basemap"
                 className="w-full h-auto"
                 loading="eager"
               />
               <p className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border">
-                Actual application capture — Digital Twin 3D over Esri World Imagery. Building
+                                  Actual application capture — Digital Twin 3D over an OpenStreetMap basemap. Building
                 extrusions use OSM height where tagged and are otherwise illustrative.
               </p>
             </div>
@@ -189,7 +189,7 @@ const LandingPage = () => {
                 </li>
                 <li className="rounded-lg border border-border bg-card px-4 py-3">
                   <span className="font-medium text-accent-teal">Observed</span> — CPCB CAAQMS
-                  stations in Gwalior, stored separately. Shown as unavailable until observation
+                  monitoring stations, stored separately. Shown as unavailable until observation
                   rows are actually retrieved.
                 </li>
                 <li className="rounded-lg border border-border bg-card px-4 py-3">
@@ -202,13 +202,13 @@ const LandingPage = () => {
             <div className="space-y-4">
               <img
                 src="/screenshots/environment.png"
-                alt="Environment page showing modelled PM2.5, PM10 and NO2 values with WHO guideline comparison and Gwalior monitoring stations"
+                alt="Environment page showing modelled PM2.5, PM10 and NO2 values with WHO guideline comparison and monitoring stations"
                 className="w-full h-auto rounded-xl border border-border"
                 loading="lazy"
               />
               <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
                 <strong className="font-semibold">Known limitations.</strong> No traffic volumes or
-                congestion data exist. OSM coverage in Gwalior is sparse (127 mapped buildings in
+                                  congestion data exist. OSM coverage in the study area is sparse (127 mapped buildings in
                 4.4 km²), so the 3D extrusion is mostly illustrative. The AOI is a documented
                 rectangle, not a surveyed boundary. No ML model is trained — the analyst uses SQL,
                 not a language model.
@@ -236,7 +236,7 @@ const LandingPage = () => {
 
       <footer className="border-t border-border">
         <div className="max-w-7xl mx-auto px-4 py-6 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>CityPulse AI — urban analytics for Gwalior, Madhya Pradesh.</span>
+          <span>CityPulse AI — urban analytics for a generated digital-twin district.</span>
           <div className="flex gap-4">
             <Link to="/methodology" className="hover:text-foreground">
               Methodology

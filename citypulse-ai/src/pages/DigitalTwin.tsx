@@ -4,6 +4,7 @@ import type { GeoJsonObject } from "geojson";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { api, type AoiBoundary, type GeoJsonFeatureCollection, type LayerInfo, type Summary } from "../lib/api";
+import { generateCityPlan } from "../lib/cityPlan";
 import {
   DEFAULT_PM25_COEFFICIENT,
   TREE_CANOPY_M2,
@@ -185,57 +186,44 @@ function DigitalTwin() {
     return () => controller.abort();
   }, [viewMode]);
 
-  // Real neighbours of the build site, measured from the loaded footprints.
+  // The Virtual City's plan, generated once for the study-area rectangle.
+  const [planMinLon, planMinLat, planMaxLon, planMaxLat] = summary?.aoi?.bbox ?? [
+    78.17, 26.21, 78.19, 26.23,
+  ];
+  const plan = useMemo(
+    () =>
+      generateCityPlan(
+        {
+          west: planMinLon,
+          south: planMinLat,
+          east: planMaxLon,
+          north: planMaxLat,
+        },
+        20261114,
+      ),
+    [planMinLon, planMinLat, planMaxLon, planMaxLat],
+  );
+
+  // Neighbours of the build site, measured from the generated plan.
   const buildContext = useMemo<SimContext>(() => {
-    const buildings =
-      layers.find((layer) => layer.info.table_name === "buildings")?.data.features ?? [];
-    // Same centre the map camera uses, derived directly so this memo does not
-    // depend on a later declaration.
-    const [minLon, minLat, maxLon, maxLat] = summary?.aoi?.bbox ?? [78.17, 26.21, 78.19, 26.23];
-    const lat0 = (minLat + maxLat) / 2;
-    const lon0 = (minLon + maxLon) / 2;
+    const lat0 = (planMinLat + planMaxLat) / 2;
+    const lon0 = (planMinLon + planMaxLon) / 2;
     let count = 0;
     let floorsSum = 0;
 
-    buildings.forEach((feature) => {
-      const geometry = feature.geometry as { type?: string; coordinates?: unknown } | null;
-      const firstRing =
-        geometry?.type === "Polygon"
-          ? (geometry.coordinates as unknown[][])[0]
-          : geometry?.type === "MultiPolygon"
-            ? (geometry.coordinates as unknown[][][])[0]?.[0]
-            : null;
-      if (!Array.isArray(firstRing) || firstRing.length < 3) return;
-
-      const sum = firstRing.reduce(
-        (acc, point) => {
-          const pair = point as number[];
-          return [acc[0] + Number(pair[0]), acc[1] + Number(pair[1])];
-        },
-        [0, 0],
-      );
-      const lon = sum[0] / firstRing.length;
-      const lat = sum[1] / firstRing.length;
-      const dx = (lon - lon0) * 111_320 * Math.cos((lat0 * Math.PI) / 180);
-      const dy = (lat - lat0) * 110_540;
+    plan.buildings.forEach((building) => {
+      const dx = (building.lon - lon0) * 111_320 * Math.cos((lat0 * Math.PI) / 180);
+      const dy = (building.lat - lat0) * 110_540;
       if (Math.hypot(dx, dy) > 60) return;
-
-      const properties = feature.properties ?? {};
-      const levels = Number(properties.levels);
-      const height = Number(properties.height_m);
       count += 1;
-      floorsSum += Number.isFinite(levels) && levels > 0
-        ? levels
-        : Number.isFinite(height) && height > 0
-          ? height / 3.2
-          : 1;
+      floorsSum += Math.max(1, Math.round(building.height / 3.2));
     });
 
     return {
       nearbyBuildings: count,
       nearbyAverageFloors: count > 0 ? floorsSum / count : 0,
     };
-  }, [layers, summary]);
+  }, [plan, planMinLat, planMaxLat, planMinLon, planMaxLon]);
 
   const simResult = useMemo(
     () => (baseline ? simulateInterventions(baseline, interventions, buildContext) : null),
@@ -273,13 +261,11 @@ function DigitalTwin() {
         <header className="flex flex-wrap items-end justify-between gap-4 mb-4">
           <div>
             <p className="text-xs uppercase tracking-widest text-accent-cyan/80 mb-1">Digital Twin</p>
-            <h1 className="text-2xl md:text-3xl font-semibold">
-              {summary?.aoi ? summary.aoi.name : "Maharaj Bada study area"}
-            </h1>
+            <h1 className="text-2xl md:text-3xl font-semibold">CityPulse District</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {summary?.aoi
-                ? `${summary.aoi.city}, ${summary.aoi.state} · ${summary.aoi.area_km2} km² · geometry from OpenStreetMap`
-                : "Loading ingested geometry from PostGIS"}
+                ? `${summary.aoi.area_km2} km² study area · generated city · 2D and 3D use the ingested OpenStreetMap layers`
+                : "Loading the study area from PostGIS"}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -369,9 +355,9 @@ function DigitalTwin() {
               }
             >
               <TwinSim
+                plan={plan}
                 aoi={aoi}
                 center={view.center}
-                layers={layers.map((layer) => ({ table: layer.info.table_name, data: layer.data }))}
                 trees={interventions.trees}
                 garbageSites={interventions.garbageSites}
                 cars={interventions.carsAdded}
@@ -916,10 +902,10 @@ function DigitalTwin() {
                   onChange={(event) => setShowFabric(event.target.checked)}
                   className="accent-[#6E7F97]"
                 />
-                <span>Synthetic city fill</span>
+                <span>Generated buildings</span>
               </label>
               <p className="text-[10px] text-muted-foreground mt-1">
-                Dimmer blocks are generated houses, shops, apartments and sheds — not surveyed.
+                Streets, blocks, parks, lake and campus are generated, not surveyed.
               </p>
 
               <div className="mt-2 border-t border-border pt-1.5 text-[10px] text-muted-foreground space-y-1">
@@ -938,9 +924,9 @@ function DigitalTwin() {
         </div>
 
         <p className="mt-3 text-[11px] text-muted-foreground">
-          Boundaries clipped to the {summary?.aoi?.name ?? "Maharaj Bada"} AOI. Source:{" "}
-          {summary?.attribution ?? "© OpenStreetMap contributors (ODbL)"}. OSM coverage is
-          incomplete: unmapped buildings, facilities and street trees are not shown.
+          The Virtual City is a generated study area: its streets, blocks, parks, lake and
+          campus are synthetic, not survey data. The 2D and 3D views show the ingested
+          OpenStreetMap layers ({summary?.attribution ?? "© OpenStreetMap contributors (ODbL)"}).
         </p>
       </div>
     </div>

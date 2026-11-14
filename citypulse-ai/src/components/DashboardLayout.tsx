@@ -57,7 +57,7 @@ const DashboardLayout = () => {
 
           <div className="flex items-center gap-2">
             <span className="hidden xl:inline text-xs text-muted-foreground">
-              Gwalior, MP · Maharaj Bada
+              Generated district · simulated
             </span>
             <button
               type="button"

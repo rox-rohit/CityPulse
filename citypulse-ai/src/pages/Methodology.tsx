@@ -2,7 +2,7 @@ const SECTIONS = [
   {
     title: "Scope and study area",
     body: [
-      "CityPulse AI analyses the Maharaj Bada / Lashkar area of Gwalior, Madhya Pradesh. The current Area of Interest is a documented rectangle: longitude 78.170–78.190 E, latitude 26.210–26.230 N, covering 4.434 km².",
+      "CityPulse AI models a 4.434 km² study area: a rectangle between longitude 78.170–78.190 E and latitude 26.210–26.230 N. The Virtual City inside it is fully generated; the 2D and 3D layers are ingested from OpenStreetMap.",
       "The AOI is stored as a single SRID 4326 polygon in aoi_boundary and every ingested feature is clipped to it. It is a documented study rectangle, not a surveyed municipal boundary — no authoritative polygon was found (see docs/aoi-boundary-investigation.md).",
     ],
   },
@@ -180,7 +180,7 @@ CPCB CAAQMS ─────┘                              │
               <li>Road length removed = class length × closed share</li>
             </ul>
             <p>
-              The response coefficient is an assumption, not an empirical Gwalior value; changing it
+              The response coefficient is an assumption, not an empirical value; changing it
               from 0.05 to 2.0 changes the result by more than an order of magnitude. Temperature
               effects are not modelled.
             </p>

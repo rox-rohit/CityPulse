@@ -230,7 +230,7 @@ const ScenarioLab = () => {
                     className="w-full accent-[#A78BFA]"
                   />
                   <span className="text-[10px] text-amber-300">
-                    Assumption only — no local study establishes this coefficient for Gwalior.
+                    Assumption only — no local study establishes this coefficient.
                   </span>
                 </label>
 

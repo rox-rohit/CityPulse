@@ -2,6 +2,33 @@
 
 All notable changes to CityPulse AI. Dates are ISO-8601.
 
+## [0.7.0] - 2026-11-14
+
+### Changed
+- **The Virtual City is now a planned, generated city** instead of a scatter of
+  roadside boxes. `src/lib/cityPlan.ts` lays out a 104 m street grid with avenues
+  every fourth street, then fills each block by district: a downtown core of
+  towers (up to ~140 m), a mid-rise ring, low-rise housing, an industrial estate,
+  and a college campus. 1,352 buildings, 42 streets, 370 trees, plus parks, a
+  lake and a forest, all colour-zoned by district.
+- **MITS campus** added as a fixed set piece: main building, library, workshop,
+  three hostels and a sports hall, with an on-map label.
+- **3D view now uses an OpenStreetMap street basemap** instead of Esri satellite
+  imagery.
+- District and campus labels are drawn in the scene; buildings can be hidden with
+  the "Generated buildings" toggle.
+
+### Removed
+- Place branding from the product: the Digital Twin is now "CityPulse District",
+  with study-area wording across the landing page, methodology, traffic,
+  environment and scenario copy. Backend provenance for measured data (station
+  names, data sources) still names its real source, as it must.
+- `cityFabric.ts`, the roadside scatter generator this replaces.
+
+### Added
+- `src/lib/cityPlan.test.ts`: district population, core skyline, low-rise edge,
+  campus naming, labels, determinism and bounds (32 frontend tests total).
+
 ## [0.6.0] - 2026-11-14
 
 ### Added

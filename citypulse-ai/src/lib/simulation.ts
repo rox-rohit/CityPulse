@@ -9,7 +9,7 @@
  * Assumptions, all printed in the UI:
  * - A mature tree provides 25 m² of canopy.
  * - PM2.5 responds to a change in green share by a user-set coefficient
- *   (% per green-share point). No Gwalior study establishes this value.
+ *   (% per green-share point). No local study establishes this value.
  * - A garbage site is assumed to represent 50 kg/day of uncollected waste.
  * - 1,000 extra vehicles per day add 0.8 µg/m³ of PM2.5 (order-of-magnitude).
  * - Each blocked drain is assumed to put 0.35 ha at surface-flood risk.

@@ -2,10 +2,12 @@
 
 **Understand Your City. Anticipate Its Future.**
 
-An urban analytics and digital-twin platform for **Maharaj Bada / Lashkar, Gwalior
-(4.434 km²)**, built on real geospatial data. Every number it shows is labelled by
-how it was produced — measured, modelled, derived or simulated — and gaps are
-shown as gaps rather than filled with invented values.
+An urban analytics and digital-twin platform over a 4.434 km² study area. The
+**Virtual City** is a generated district — a street grid with a downtown core,
+mid-rise ring, low-rise housing, an industrial estate, parks, a lake and an MITS
+campus — while the 2D and 3D views render ingested OpenStreetMap geometry. Every
+number is labelled by how it was produced — measured, modelled, derived or
+simulated — and generated geometry is always marked as generated.
 
 ![Landing page](docs/screenshots/landing.png)
 
@@ -15,7 +17,7 @@ shown as gaps rather than filled with invented values.
 
 | Module | What it does | Data type |
 |--------|--------------|-----------|
-| **Digital Twin** | 862 road segments, 127 buildings, 25 facilities and 5 green spaces from OpenStreetMap, in 2D (Leaflet), 3D (CesiumJS with imagery) and a Virtual City (holographic Cesium, no imagery) where simulated interventions update the scene and a running impact panel | measured geometry; simulated effects |
+| **Digital Twin** | Ingested OpenStreetMap layers in 2D (Leaflet) and 3D (CesiumJS over an OpenStreetMap basemap), plus a **Virtual City**: a generated 1,350-building plan with districts, parks, a lake and an MITS campus, where interventions update the scene and a running impact panel | ingested geometry; generated city; simulated effects |
 | **Traffic / Road Network** | Network length by highway class, named-segment share, attribute completeness. Explicitly reports that no traffic volumes exist | measured geometry |
 | **Environmental Intelligence** | CAMS air quality and ERA5/IFS temperature with WHO 2021 comparison, OSM-derived green cover, and CPCB station metadata with distance to the AOI | modelled + observed, kept separate |
 | **Civic Issues** | Report six issue categories on the map, duplicate linkage (60 m / 30 days), moderation state machine, DBSCAN hotspots | citizen-reported, unverified |

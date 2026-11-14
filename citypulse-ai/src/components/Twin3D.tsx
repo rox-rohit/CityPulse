@@ -83,13 +83,12 @@ function Twin3D({ aoi, layers, center }: Twin3DProps) {
     if (!containerRef.current || viewerRef.current) return;
 
     const viewer = new Cesium.Viewer(containerRef.current, {
-      // CORS-enabled imagery: standard OSM tiles cannot be used as WebGL
-      // textures because they do not send Access-Control-Allow-Origin.
+      // Street map instead of satellite imagery, as requested for the twin.
       baseLayer: new Cesium.ImageryLayer(
         new Cesium.UrlTemplateImageryProvider({
-          url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
           maximumLevel: 19,
-          credit: "Imagery © Esri, Maxar, Earthstar Geographics",
+          credit: "© OpenStreetMap contributors",
         }),
       ),
       baseLayerPicker: false,
