@@ -15,7 +15,7 @@ shown as gaps rather than filled with invented values.
 
 | Module | What it does | Data type |
 |--------|--------------|-----------|
-| **Digital Twin** | 862 road segments, 127 buildings, 25 facilities and 5 green spaces from OpenStreetMap, in 2D (Leaflet) and 3D (CesiumJS), with layer toggles and a feature inspector | measured geometry |
+| **Digital Twin** | 862 road segments, 127 buildings, 25 facilities and 5 green spaces from OpenStreetMap, in 2D (Leaflet), 3D (CesiumJS with imagery) and a Virtual City (holographic Cesium, no imagery) where simulated interventions update the scene and a running impact panel | measured geometry; simulated effects |
 | **Traffic / Road Network** | Network length by highway class, named-segment share, attribute completeness. Explicitly reports that no traffic volumes exist | measured geometry |
 | **Environmental Intelligence** | CAMS air quality and ERA5/IFS temperature with WHO 2021 comparison, OSM-derived green cover, and CPCB station metadata with distance to the AOI | modelled + observed, kept separate |
 | **Civic Issues** | Report six issue categories on the map, duplicate linkage (60 m / 30 days), moderation state machine, DBSCAN hotspots | citizen-reported, unverified |

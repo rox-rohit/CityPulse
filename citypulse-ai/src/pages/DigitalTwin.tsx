@@ -1,9 +1,17 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GeoJSON, MapContainer, TileLayer, useMap } from "react-leaflet";
 import type { GeoJsonObject } from "geojson";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { api, type AoiBoundary, type GeoJsonFeatureCollection, type LayerInfo, type Summary } from "../lib/api";
+import {
+  DEFAULT_PM25_COEFFICIENT,
+  TREE_CANOPY_M2,
+  simulateInterventions,
+  type Interventions,
+  type SimBaseline,
+  type SimContext,
+} from "../lib/simulation";
 
 const OSM_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
@@ -11,8 +19,9 @@ const OSM_ATTRIBUTION =
 
 const DEFAULT_CENTER: [number, number] = [26.2205, 78.18];
 
-// Cesium is heavy, so the 3D scene is only downloaded when requested.
+// Cesium is heavy, so the 3D and virtual-city scenes are only downloaded when requested.
 const Twin3D = lazy(() => import("../components/Twin3D"));
+const TwinSim = lazy(() => import("../components/TwinSim"));
 
 const LAYER_STYLE: Record<string, L.PathOptions> = {
   roads: { color: "#39D5FF", weight: 1.7, opacity: 0.85 },
@@ -72,7 +81,24 @@ function DigitalTwin() {
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [resetKey, setResetKey] = useState(0);
-  const [viewMode, setViewMode] = useState<"2d" | "3d">("2d");
+  const [viewMode, setViewMode] = useState<"2d" | "3d" | "sim">("2d");
+
+  // Virtual City interventions and the real baseline they are applied to.
+  const [baseline, setBaseline] = useState<SimBaseline | null>(null);
+  const [baselineError, setBaselineError] = useState<string | null>(null);
+  const [interventions, setInterventions] = useState<Interventions>({
+    trees: 0,
+    garbageSites: 0,
+    carsAdded: 0,
+    potholes: 0,
+    blockedDrains: 0,
+    closedClass: "secondary",
+    closurePercent: 0,
+    pm25Coefficient: DEFAULT_PM25_COEFFICIENT,
+    buildingFloors: 0,
+    buildingFootprintM2: 400,
+  });
+  const baselineRequested = useRef(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setStatus("loading");
@@ -123,6 +149,98 @@ function DigitalTwin() {
     return () => controller.abort();
   }, [load]);
 
+  // Baseline for the simulation, fetched only when the virtual city is opened.
+  useEffect(() => {
+    if (viewMode !== "sim" || baselineRequested.current) return;
+    baselineRequested.current = true;
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const [green, network, environment] = await Promise.all([
+          api.greenCover(controller.signal),
+          api.network(controller.signal),
+          api.environmentOverview(14, controller.signal),
+        ]);
+        const pm25 = environment.air_quality.pollutants.find((item) => item.variable === "pm2_5");
+        setBaseline({
+          aoiAreaHa: green.aoi_area_ha,
+          greenHa: green.mapped_green_area_ha,
+          greenSharePercent: green.mapped_share_of_aoi_percent ?? 0,
+          roadKm: network.total_length_km,
+          roadByClass: network.by_class,
+          pm25Mean24h: pm25?.mean_24h ?? null,
+        });
+        setBaselineError(null);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+        baselineRequested.current = false;
+        setBaselineError(
+          error instanceof Error ? error.message : "Failed to load the simulation baseline",
+        );
+      }
+    })();
+
+    return () => controller.abort();
+  }, [viewMode]);
+
+  // Real neighbours of the build site, measured from the loaded footprints.
+  const buildContext = useMemo<SimContext>(() => {
+    const buildings =
+      layers.find((layer) => layer.info.table_name === "buildings")?.data.features ?? [];
+    // Same centre the map camera uses, derived directly so this memo does not
+    // depend on a later declaration.
+    const [minLon, minLat, maxLon, maxLat] = summary?.aoi?.bbox ?? [78.17, 26.21, 78.19, 26.23];
+    const lat0 = (minLat + maxLat) / 2;
+    const lon0 = (minLon + maxLon) / 2;
+    let count = 0;
+    let floorsSum = 0;
+
+    buildings.forEach((feature) => {
+      const geometry = feature.geometry as { type?: string; coordinates?: unknown } | null;
+      const firstRing =
+        geometry?.type === "Polygon"
+          ? (geometry.coordinates as unknown[][])[0]
+          : geometry?.type === "MultiPolygon"
+            ? (geometry.coordinates as unknown[][][])[0]?.[0]
+            : null;
+      if (!Array.isArray(firstRing) || firstRing.length < 3) return;
+
+      const sum = firstRing.reduce(
+        (acc, point) => {
+          const pair = point as number[];
+          return [acc[0] + Number(pair[0]), acc[1] + Number(pair[1])];
+        },
+        [0, 0],
+      );
+      const lon = sum[0] / firstRing.length;
+      const lat = sum[1] / firstRing.length;
+      const dx = (lon - lon0) * 111_320 * Math.cos((lat0 * Math.PI) / 180);
+      const dy = (lat - lat0) * 110_540;
+      if (Math.hypot(dx, dy) > 60) return;
+
+      const properties = feature.properties ?? {};
+      const levels = Number(properties.levels);
+      const height = Number(properties.height_m);
+      count += 1;
+      floorsSum += Number.isFinite(levels) && levels > 0
+        ? levels
+        : Number.isFinite(height) && height > 0
+          ? height / 3.2
+          : 1;
+    });
+
+    return {
+      nearbyBuildings: count,
+      nearbyAverageFloors: count > 0 ? floorsSum / count : 0,
+    };
+  }, [layers, summary]);
+
+  const simResult = useMemo(
+    () => (baseline ? simulateInterventions(baseline, interventions, buildContext) : null),
+    [baseline, interventions, buildContext],
+  );
+
   const view = useMemo(() => {
     if (!summary?.aoi) {
       return { center: DEFAULT_CENTER, zoom: 14 };
@@ -165,7 +283,7 @@ function DigitalTwin() {
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <div className="flex rounded-lg border border-border overflow-hidden mr-2">
-              {(["2d", "3d"] as const).map((mode) => (
+              {(["2d", "3d", "sim"] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -176,7 +294,7 @@ function DigitalTwin() {
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {mode}
+                  {mode === "sim" ? "Virtual city" : mode}
                 </button>
               ))}
             </div>
@@ -238,6 +356,29 @@ function DigitalTwin() {
                 aoi={aoi}
                 center={view.center}
                 layers={layers.map((layer) => ({ table: layer.info.table_name, data: layer.data }))}
+              />
+            </Suspense>
+          ) : viewMode === "sim" ? (
+            <Suspense
+              fallback={
+                <div className="absolute inset-0 flex items-center justify-center gap-3 text-sm text-muted-foreground">
+                  <span className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  Building the virtual city…
+                </div>
+              }
+            >
+              <TwinSim
+                aoi={aoi}
+                center={view.center}
+                layers={layers.map((layer) => ({ table: layer.info.table_name, data: layer.data }))}
+                trees={interventions.trees}
+                garbageSites={interventions.garbageSites}
+                cars={interventions.carsAdded}
+                potholes={interventions.potholes}
+                buildingFloors={interventions.buildingFloors}
+                buildingFootprintM2={interventions.buildingFootprintM2}
+                closedClass={interventions.closedClass}
+                closurePercent={interventions.closurePercent}
               />
             </Suspense>
           ) : (
@@ -365,6 +506,418 @@ function DigitalTwin() {
                   </div>
                 )}
               </dl>
+            </div>
+          )}
+          {/* Virtual City: simulated impact readout */}
+          {viewMode === "sim" && (
+            <div className="absolute top-3 left-3 z-[600] w-64 max-h-[calc(100%-1.5rem)] overflow-auto rounded-lg border border-border bg-background/95 backdrop-blur px-3 py-2 shadow-lg">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Simulated impact
+                </p>
+                <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                  simulated
+                </span>
+              </div>
+
+              {baselineError && <p className="text-xs text-red-400">{baselineError}</p>}
+              {!baseline && !baselineError && (
+                <p className="text-xs text-muted-foreground">Loading baseline values…</p>
+              )}
+
+              {baseline && simResult && (
+                <>
+                  <dl className="space-y-1.5 text-xs">
+                    <div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Canopy added</dt>
+                        <dd className="text-foreground">+{simResult.canopyHa.toFixed(2)} ha</dd>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {interventions.trees.toLocaleString()} trees × {TREE_CANOPY_M2} m²
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Green share of AOI</dt>
+                        <dd className="text-foreground">
+                          {baseline.greenSharePercent.toFixed(2)}% →{" "}
+                          {simResult.newSharePercent.toFixed(2)}%
+                        </dd>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        baseline {baseline.greenHa.toFixed(1)} ha of {baseline.aoiAreaHa.toFixed(0)} ha
+                      </p>
+                    </div>
+                    <div className="border-t border-border pt-1.5">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">PM2.5 (modelled baseline)</dt>
+                        <dd className="text-foreground">
+                          {simResult.pm25Projected !== null
+                            ? `${simResult.pm25Projected.toFixed(1)} µg/m³`
+                            : "unavailable"}
+                        </dd>
+                      </div>
+                      <p className="text-[10px] text-amber-300">
+                        {simResult.pm25ChangePercent !== null
+                          ? `${simResult.pm25ChangePercent.toFixed(2)}% — assumed coefficient ${interventions.pm25Coefficient.toFixed(2)}`
+                          : "no modelled baseline stored"}
+                      </p>
+                    </div>
+                    <div className="border-t border-border pt-1.5">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Road closed</dt>
+                        <dd className="text-foreground">{simResult.closedKm.toFixed(2)} km</dd>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {simResult.closedShare.toFixed(1)}% of the {baseline.roadKm.toFixed(0)} km
+                        network · {interventions.closedClass}
+                      </p>
+                    </div>
+                    <div className="border-t border-border pt-1.5">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Waste load</dt>
+                        <dd className="text-foreground">
+                          {simResult.garbageLoadKgPerDay.toLocaleString()} kg/day
+                        </dd>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {interventions.garbageSites} sites × 50 kg/day, assumed
+                      </p>
+                    </div>
+                    <div className="border-t border-border pt-1.5">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Projected PM2.5</dt>
+                        <dd className="text-foreground">
+                          {simResult.pm25Total !== null
+                            ? `${simResult.pm25Total.toFixed(1)} µg/m³`
+                            : "unavailable"}
+                        </dd>
+                      </div>
+                      <p className="text-[10px] text-amber-300">
+                        {simResult.aqiCategory
+                          ? `CPCB band: ${simResult.aqiCategory}`
+                          : "no modelled baseline stored"}
+                        {interventions.carsAdded > 0
+                          ? ` · +${simResult.trafficPm25.toFixed(2)} µg/m³ from ${interventions.carsAdded.toLocaleString()} vehicles/day`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="border-t border-border pt-1.5">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">Potholes / flooded</dt>
+                        <dd className="text-foreground">
+                          {simResult.repairedAreaM2.toFixed(0)} m² / {simResult.floodedHa.toFixed(2)} ha
+                        </dd>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {interventions.potholes} potholes · {interventions.blockedDrains} drains
+                        blocked (assumed)
+                      </p>
+                    </div>
+                    <div className="border-t border-border pt-1.5">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">City condition</dt>
+                        <dd className="text-foreground">{simResult.cityCondition.toFixed(1)}/100</dd>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        assumed weights: waste, potholes, drains, closures, traffic
+                      </p>
+                    </div>
+                    {simResult.seismic && (
+                      <div className="border-t border-border pt-1.5">
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-muted-foreground">Seismic check</dt>
+                          <dd className="text-foreground">
+                            {(simResult.seismic.damageProbability * 100).toFixed(0)}% per building
+                          </dd>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Mw {simResult.seismic.scenarioMagnitude} at {simResult.seismic.scenarioDistanceKm} km · PGA{" "}
+                          {simResult.seismic.pgaG.toFixed(3)} g · {simResult.seismic.nearbyBuildings}{" "}
+                          neighbours within 60 m · ~{simResult.seismic.expectedDamaged.toFixed(1)}{" "}
+                          expected past slight damage
+                        </p>
+                        <p className="text-[10px] text-amber-300">
+                          simplified fragility, not a hazard assessment
+                        </p>
+                      </div>
+                    )}
+                  </dl>
+
+                  <div className="mt-2 border-t border-border pt-1.5">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                      Not modelled
+                    </p>
+                    <ul className="list-disc list-inside text-[10px] text-muted-foreground space-y-0.5">
+                      {simResult.notModelled.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Virtual City: intervention controls */}
+          {viewMode === "sim" && (
+            <div className="absolute top-3 right-3 z-[600] w-60 max-h-[calc(100%-1.5rem)] overflow-auto rounded-lg border border-border bg-background/95 backdrop-blur px-3 py-2 shadow-lg">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Interventions
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInterventions({
+                      trees: 0,
+                      garbageSites: 0,
+                      carsAdded: 0,
+                      potholes: 0,
+                      blockedDrains: 0,
+                      closedClass: baseline?.roadByClass[0]?.highway_class ?? "secondary",
+                      closurePercent: 0,
+                      pm25Coefficient: DEFAULT_PM25_COEFFICIENT,
+                      buildingFloors: 0,
+                      buildingFootprintM2: 400,
+                    })
+                  }
+                  className="text-[11px] text-primary hover:underline"
+                >
+                  Reset
+                </button>
+              </div>
+
+              <label className="block text-xs space-y-1 mb-2">
+                <div className="flex justify-between">
+                  <span>Trees planted</span>
+                  <span className="text-foreground">{interventions.trees.toLocaleString()}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={5000}
+                  step={50}
+                  value={interventions.trees}
+                  onChange={(event) =>
+                    setInterventions((current) => ({
+                      ...current,
+                      trees: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full accent-[#35D6B4]"
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  {interventions.trees > 0
+                    ? `≈ ${Math.ceil(interventions.trees / 150)} trees per model`
+                    : "no trees placed"}
+                </span>
+              </label>
+
+              <label className="block text-xs space-y-1 mb-2">
+                <div className="flex justify-between">
+                  <span>Garbage sites</span>
+                  <span className="text-foreground">{interventions.garbageSites}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={60}
+                  step={1}
+                  value={interventions.garbageSites}
+                  onChange={(event) =>
+                    setInterventions((current) => ({
+                      ...current,
+                      garbageSites: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full accent-[#F59E0B]"
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  Markers along streets · load is an assumption
+                </span>
+              </label>
+
+              <label className="block text-xs space-y-1 mb-2">
+                <div className="flex justify-between">
+                  <span>Extra vehicles / day</span>
+                  <span className="text-foreground">{interventions.carsAdded.toLocaleString()}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={20000}
+                  step={250}
+                  value={interventions.carsAdded}
+                  onChange={(event) =>
+                    setInterventions((current) => ({
+                      ...current,
+                      carsAdded: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full accent-[#B8C4DA]"
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  Assumed +0.8 µg/m³ PM2.5 per 1,000 vehicles
+                </span>
+              </label>
+
+              <label className="block text-xs space-y-1 mb-2">
+                <div className="flex justify-between">
+                  <span>Potholes repaired</span>
+                  <span className="text-foreground">{interventions.potholes}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={5}
+                  value={interventions.potholes}
+                  onChange={(event) =>
+                    setInterventions((current) => ({
+                      ...current,
+                      potholes: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full accent-[#11151F]"
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  {interventions.potholes * 1.5} m² of patching
+                </span>
+              </label>
+
+              <label className="block text-xs space-y-1 mb-2">
+                <div className="flex justify-between">
+                  <span>Drains blocked</span>
+                  <span className="text-foreground">{interventions.blockedDrains}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={3}
+                  step={1}
+                  value={interventions.blockedDrains}
+                  onChange={(event) =>
+                    setInterventions((current) => ({
+                      ...current,
+                      blockedDrains: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full accent-[#8B6B4A]"
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  {interventions.blockedDrains * 0.35} ha at flood risk (assumed)
+                </span>
+              </label>
+
+              <div className="border-t border-border pt-2 mb-2">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
+                  Proposed building
+                </p>
+                <label className="block text-xs space-y-1 mb-1">
+                  <div className="flex justify-between">
+                    <span>Storeys</span>
+                    <span className="text-foreground">{interventions.buildingFloors}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={20}
+                    step={1}
+                    value={interventions.buildingFloors}
+                    onChange={(event) =>
+                      setInterventions((current) => ({
+                        ...current,
+                        buildingFloors: Number(event.target.value),
+                      }))
+                    }
+                    className="w-full accent-[#FB923C]"
+                  />
+                </label>
+                <label className="block text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span>Footprint</span>
+                    <span className="text-foreground">
+                      {interventions.buildingFootprintM2} m²
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={100}
+                    max={2000}
+                    step={50}
+                    value={interventions.buildingFootprintM2}
+                    onChange={(event) =>
+                      setInterventions((current) => ({
+                        ...current,
+                        buildingFootprintM2: Number(event.target.value),
+                      }))
+                    }
+                    className="w-full accent-[#FB923C]"
+                  />
+                </label>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {interventions.buildingFloors > 0
+                    ? `${buildContext.nearbyBuildings} existing buildings within 60 m`
+                    : "0 storeys = no building proposed"}
+                </p>
+              </div>
+
+              <label className="block text-xs space-y-1 mb-2">
+                <span className="text-muted-foreground">Road class to close</span>
+                <select
+                  value={interventions.closedClass}
+                  onChange={(event) =>
+                    setInterventions((current) => ({
+                      ...current,
+                      closedClass: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg bg-secondary border border-border px-2 py-1.5"
+                >
+                  {(baseline?.roadByClass ?? [{ highway_class: "secondary", segments: 0, length_km: 0 }]).map(
+                    (row) => (
+                      <option key={row.highway_class} value={row.highway_class}>
+                        {row.highway_class} ({row.length_km.toFixed(1)} km)
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              <label className="block text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span>Share of class closed</span>
+                  <span className="text-foreground">{interventions.closurePercent}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={interventions.closurePercent}
+                  onChange={(event) =>
+                    setInterventions((current) => ({
+                      ...current,
+                      closurePercent: Number(event.target.value),
+                    }))
+                  }
+                  className="w-full accent-[#F87171]"
+                />
+              </label>
+
+              <div className="mt-2 border-t border-border pt-1.5 text-[10px] text-muted-foreground space-y-1">
+                <p className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#35D6B4]" /> tree
+                  <span className="w-2 h-2 rounded-full bg-[#F59E0B] ml-1" /> waste site
+                  <span className="w-2 h-2 rounded-sm bg-[#F87171] ml-1" /> closed road
+                </p>
+                <p>
+                  Geometry is the ingested OSM data. This is a schematic city, not satellite
+                  imagery, and the numbers are simulated.
+                </p>
+              </div>
             </div>
           )}
         </div>

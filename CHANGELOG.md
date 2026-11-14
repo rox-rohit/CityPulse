@@ -2,6 +2,36 @@
 
 All notable changes to CityPulse AI. Dates are ISO-8601.
 
+## [0.5.0] - 2026-11-14
+
+### Added
+- **Virtual City, a third Digital Twin view.** A holographic Cesium scene built
+  from the ingested OSM geometry with no satellite imagery: extruded building
+  footprints (residential and generic footprints in a distinct colour), the road
+  network, mapped green space and the AOI outline. The 2D and 3D views are kept.
+- Schematic 3D objects instead of dots: trees with trunk and canopy, waste
+  sites with pile and bin, vehicles, potholes, and a proposed building with its
+  60 m assessment radius.
+- Intervention controls with live impact arithmetic: trees, waste sites, extra
+  vehicles per day, potholes repaired, drains blocked, road-class closure share,
+  and a proposed building (storeys and footprint).
+- Simulated analytics panel: canopy and green share, projected PM2.5 with its
+  CPCB band, road length closed, waste load, repaired and flood-exposed area, a
+  composite city-condition index, and a simplified seismic screen of the
+  proposed building against its real neighbours.
+- `src/lib/simulation.ts` keeps the running estimate pure and unit-tested,
+  including PGA attenuation and a logistic fragility curve (20 tests).
+- Simple on-screen camera controls (zoom, rotate, top-down, reset) alongside
+  drag and wheel, so no extra mouse buttons are needed.
+
+### Notes
+- Every effect is simulated. Constants are labelled as assumptions and the panel
+  lists what is deliberately not modelled: congestion, pollutant dispersion,
+  structural response and code compliance.
+- The AOI contains no mapped lake or river in OpenStreetMap (three drain lines
+  and a swimming pool only), so no water body is drawn. Drain blockage is
+  reported numerically instead.
+
 ## [0.4.0] - 2026-11-13
 
 ### Added
