@@ -98,6 +98,7 @@ function DigitalTwin() {
     buildingFloors: 0,
     buildingFootprintM2: 400,
   });
+  const [showFabric, setShowFabric] = useState(true);
   const baselineRequested = useRef(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -379,6 +380,7 @@ function DigitalTwin() {
                 buildingFootprintM2={interventions.buildingFootprintM2}
                 closedClass={interventions.closedClass}
                 closurePercent={interventions.closurePercent}
+                showFabric={showFabric}
               />
             </Suspense>
           ) : (
@@ -906,6 +908,19 @@ function DigitalTwin() {
                   className="w-full accent-[#F87171]"
                 />
               </label>
+
+              <label className="mt-2 flex items-center gap-2 text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={showFabric}
+                  onChange={(event) => setShowFabric(event.target.checked)}
+                  className="accent-[#6E7F97]"
+                />
+                <span>Synthetic city fill</span>
+              </label>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Dimmer blocks are generated houses, shops, apartments and sheds — not surveyed.
+              </p>
 
               <div className="mt-2 border-t border-border pt-1.5 text-[10px] text-muted-foreground space-y-1">
                 <p className="flex items-center gap-1.5">

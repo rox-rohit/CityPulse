@@ -3,6 +3,11 @@ import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { AoiBoundary, GeoJsonFeatureCollection } from "../lib/api";
 import { markerCount, seededSequence } from "../lib/simulation";
+import {
+  generateCityFabric,
+  sampleParkTrees,
+  type FabricKind,
+} from "../lib/cityFabric";
 
 /**
  * Virtual City: a schematic 3D rendering of the *actual* ingested OSM geometry.
@@ -31,6 +36,14 @@ const CLOSED_RED = "#F87171";
 const GARBAGE_AMBER = "#F59E0B";
 const PROPOSED = "#FB923C";
 
+/** Muted palette for the synthetic fabric, so surveyed buildings stay readable. */
+const FABRIC_COLORS: Record<FabricKind, string> = {
+  house: "#5C6B85",
+  shop: "#7B7159",
+  apartment: "#6E7F97",
+  industry: "#5A6070",
+};
+
 export interface TwinSimLayer {
   table: string;
   data: GeoJsonFeatureCollection;
@@ -48,6 +61,7 @@ interface TwinSimProps {
   buildingFootprintM2: number;
   closedClass: string;
   closurePercent: number;
+  showFabric: boolean;
 }
 
 type LonLat = [number, number];
@@ -152,6 +166,7 @@ function TwinSim({
   buildingFootprintM2,
   closedClass,
   closurePercent,
+  showFabric,
 }: TwinSimProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
@@ -160,11 +175,14 @@ function TwinSim({
   const garbageModelsRef = useRef<Cesium.Entity[]>([]);
   const carEntitiesRef = useRef<Cesium.Entity[]>([]);
   const potholeEntitiesRef = useRef<Cesium.Entity[]>([]);
+  const fabricEntitiesRef = useRef<Cesium.Entity[]>([]);
+  const showFabricRef = useRef(showFabric);
   const proposedRef = useRef<Cesium.Entity | null>(null);
   const riskRingRef = useRef<Cesium.Entity | null>(null);
   const homeViewRef = useRef<{ destination: Cesium.Cartesian3; heading: number; pitch: number } | null>(null);
   const [status, setStatus] = useState<"loading" | "ready">("loading");
   const [counts, setCounts] = useState({ buildings: 0, residential: 0, roads: 0 });
+  const [fabricCounts, setFabricCounts] = useState<Record<FabricKind, number> | null>(null);
 
   // Viewer: no imagery at all — a dark void with the geometry floating in it.
   useEffect(() => {
@@ -221,6 +239,33 @@ function TwinSim({
     let buildingCount = 0;
     let residentialCount = 0;
     let roadCount = 0;
+
+    // Study-area extent, computed before anything needs it.
+    const bounds = (() => {
+      let west = Infinity;
+      let east = -Infinity;
+      let south = Infinity;
+      let north = -Infinity;
+      if (aoi) {
+        polygonRings(aoi.geometry).forEach((ring) => {
+          for (let i = 0; i < ring.length; i += 2) {
+            west = Math.min(west, ring[i]);
+            east = Math.max(east, ring[i]);
+            south = Math.min(south, ring[i + 1]);
+            north = Math.max(north, ring[i + 1]);
+          }
+        });
+      }
+      if (!Number.isFinite(west) || !Number.isFinite(south)) {
+        return {
+          west: center[1] - 0.01,
+          east: center[1] + 0.01,
+          south: center[0] - 0.01,
+          north: center[0] + 0.01,
+        };
+      }
+      return { west, south, east, north };
+    })();
 
     if (aoi) {
       const outline = polygonRings(aoi.geometry)[0];
@@ -307,6 +352,44 @@ function TwinSim({
           });
         });
       }
+    });
+
+    // --- Synthetic city fabric: fills the land OSM has not mapped ---
+    const fabric = generateCityFabric(layers, bounds, 20261114);
+    fabric.blocks.forEach((block) => {
+      const position = Cesium.Cartesian3.fromDegrees(
+        block.lon,
+        block.lat,
+        block.height / 2,
+      );
+      fabricEntitiesRef.current.push(
+        viewer.entities.add({
+          name: `Synthetic ${block.kind} (not surveyed)`,
+          position,
+          orientation: Cesium.Transforms.headingPitchRollQuaternion(
+            position,
+            new Cesium.HeadingPitchRoll(block.rotation, 0, 0),
+          ),
+          show: showFabricRef.current,
+          box: {
+            dimensions: new Cesium.Cartesian3(block.width, block.depth, block.height),
+            material: Cesium.Color.fromCssColorString(FABRIC_COLORS[block.kind]).withAlpha(0.6),
+          },
+        }),
+      );
+    });
+    setFabricCounts(fabric.counts);
+
+    // Parks get trees, so mapped green space reads as a park.
+    sampleParkTrees(layers, 160).forEach(([lon, lat]) => {
+      viewer.entities.add({
+        name: "Park tree (schematic)",
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, 3),
+        ellipsoid: {
+          radii: new Cesium.Cartesian3(1.9, 1.9, 2.4),
+          material: Cesium.Color.fromCssColorString("#2E9E86").withAlpha(0.85),
+        },
+      });
     });
 
     // --- Schematic pools, created once and shown/hidden by the interventions ---
@@ -398,29 +481,13 @@ function TwinSim({
     setCounts({ buildings: buildingCount, residential: residentialCount, roads: roadCount });
 
     // Frame the AOI from its own extent: lookAt pins the bounding sphere centre.
-    let west = Infinity;
-    let east = -Infinity;
-    let south = Infinity;
-    let north = -Infinity;
-    if (aoi) {
-      polygonRings(aoi.geometry).forEach((ring) => {
-        for (let i = 0; i < ring.length; i += 2) {
-          west = Math.min(west, ring[i]);
-          east = Math.max(east, ring[i]);
-          south = Math.min(south, ring[i + 1]);
-          north = Math.max(north, ring[i + 1]);
-        }
-      });
-    }
-    if (!Number.isFinite(west) || !Number.isFinite(south)) {
-      west = center[1] - 0.01;
-      east = center[1] + 0.01;
-      south = center[0] - 0.01;
-      north = center[0] + 0.01;
-    }
-
-    const bounds = Cesium.Rectangle.fromDegrees(west, south, east, north);
-    const sphere = Cesium.BoundingSphere.fromRectangle3D(bounds);
+    const rectangle = Cesium.Rectangle.fromDegrees(
+      bounds.west,
+      bounds.south,
+      bounds.east,
+      bounds.north,
+    );
+    const sphere = Cesium.BoundingSphere.fromRectangle3D(rectangle);
     const pitch = Cesium.Math.toRadians(-50);
     viewer.camera.lookAt(
       sphere.center,
@@ -484,6 +551,14 @@ function TwinSim({
       });
     });
   }, [trees, garbageSites, cars, potholes, closedClass, closurePercent, status, counts.roads]);
+
+  // Synthetic fabric visibility.
+  useEffect(() => {
+    showFabricRef.current = showFabric;
+    fabricEntitiesRef.current.forEach((entity) => {
+      entity.show = showFabric;
+    });
+  }, [showFabric]);
 
   // Proposed building: created once, resized live.
   useEffect(() => {
@@ -618,8 +693,12 @@ function TwinSim({
       </div>
 
       <p className="pointer-events-none absolute bottom-3 left-3 z-[600] text-[10px] text-muted-foreground">
-        {counts.buildings} footprints ({counts.residential} residential/generic) ·{" "}
-        {counts.roads} road segments · drag to look, wheel to zoom
+        {counts.buildings} surveyed footprints ({counts.residential} residential/generic) ·{" "}
+        {counts.roads} road segments
+        {fabricCounts
+          ? ` · ${Object.values(fabricCounts).reduce((a, b) => a + b, 0)} synthetic blocks`
+          : ""}
+        {" "}· drag to look, wheel to zoom
       </p>
     </div>
   );

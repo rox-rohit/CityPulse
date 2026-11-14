@@ -2,6 +2,24 @@
 
 All notable changes to CityPulse AI. Dates are ISO-8601.
 
+## [0.6.0] - 2026-11-14
+
+### Added
+- **Synthetic city fabric** in the Virtual City view. OpenStreetMap holds only
+  128 footprints in the 4.43 km² AOI, so roughly 1,200 generated houses, shops,
+  apartments and industrial sheds now line the real street network, filling the
+  empty land the survey does not cover. The fabric is seeded (stable between
+  renders), skips footpaths, and never overlaps surveyed buildings, roads or
+  green space. It is labelled as synthetic and can be switched off; surveyed
+  footprints stay brighter and drawn on top.
+- Park trees inside mapped green space, so parks read as parks.
+- `src/lib/cityFabric.ts` with unit tests covering determinism, bounds,
+  per-kind counts and collision avoidance (32 frontend tests total).
+
+### Notes
+- The fabric is illustrative context, not data. It is never counted in the
+  layer totals, API responses or measured analytics.
+
 ## [0.5.0] - 2026-11-14
 
 ### Added
